@@ -1,0 +1,25 @@
+---
+description: Módulo Numeradores ERP — operación de correlativos por módulo/tipo
+globs: ["src/components/numeradores/**/*.tsx", "src/components/numeradores/**/*.ts", "src/app/(private)/app/numeradores/**/*.tsx", "src/app/api/numeradores/**/*.ts"]
+---
+
+# Módulo Numeradores — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: Settings table operativa
+- Referencia principal: `src/components/dashboard/settings/invoices-table.tsx`
+- Referencia secundaria: `src/components/dashboard/order/orders-filters.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Tabla operativa por `modulo/tipo_documento` con emisión controlada desde backend.
+
+## Flujo obligatorio
+`Motor -> /api/numeradores -> page.tsx -> numeradores-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla numeradores, schema, endpoints `/v1/numeradores/`.

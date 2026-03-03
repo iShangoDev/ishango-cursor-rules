@@ -1,0 +1,59 @@
+---
+description: Gate UX/performance automático para cambios en vistas privadas, BFF y fetchers server.
+globs: ["src/app/(private)/app/**/page.tsx", "src/components/**/*-view.tsx", "src/components/**/*-detail*.tsx", "src/app/api/**/*.ts", "src/lib/data/**/*.ts", "package.json"]
+alwaysApply: false
+---
+
+# Validación UX/Performance — iShangoERP
+
+## Gate automático obligatorio
+
+Antes de push, ejecutar:
+
+```powershell
+npm run validate:ux
+npm run smoke:ux
+```
+
+Si falla cualquiera, no se cierra la iteración.
+
+## Precondición para Lighthouse auth-aware
+
+- `MOTOR_URL` disponible para login real contra Motor.
+- Credenciales definidas para el flujo headless:
+  - `LH_EMAIL`
+  - `LH_PASSWORD`
+- Si Lighthouse reporta redirect a `/auth/login`, considerar la auditoría inválida y fallar el gate.
+
+## Qué valida el gate
+
+1. `lint` y `typecheck` (errores de código y tipos)
+2. `build` (compatibilidad real con Vercel)
+3. `lighthouse` en rutas críticas (performance y accesibilidad)
+4. smoke técnico de rutas privadas y sesión expirada
+
+## Frontera server/client (bloqueante)
+
+- Datos iniciales de vistas críticas deben resolverse en `page.tsx` (server-first) cuando aplica.
+- `*-view.tsx` consume `initialData` / `initialError`.
+- No se permiten N+1 ni cascadas de `useEffect` al montar.
+- No saltar capas: Motor -> BFF -> page.tsx -> view -> hijos.
+
+## Rutas críticas para validación
+
+- `/app`
+- `/app/roles`
+- `/app/usuarios`
+- `/app/settings/account`
+
+## Evidencia mínima en docs de resultado
+
+- comandos ejecutados
+- resultado (OK/FAIL) por gate
+- hallazgos de UX/performance
+- acciones manuales pendientes (ej. Jam)
+
+## Fuera del alcance automático (manual)
+
+- Jam se registra manualmente por QA/PM para evidencia cualitativa.
+- El gate automático no depende de Jam.

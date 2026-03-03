@@ -1,0 +1,26 @@
+---
+description: Módulo Configuración ERP — settings por módulo/clave
+globs: ["src/components/configuracion/**/*.tsx", "src/components/configuracion/**/*.ts", "src/app/(private)/app/configuracion/**/*.tsx", "src/app/api/config/**/*.ts"]
+---
+
+# Módulo Configuración — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: Settings cards
+- Referencia principal: `src/components/dashboard/settings/account-details.tsx`
+- Referencia secundaria: `src/components/dashboard/settings/integrations.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Secciones en cards por dominio de settings.
+- Edición tipo-aware (`texto`, `entero`, `decimal`, `booleano`).
+
+## Flujo obligatorio
+`Motor -> /api/config/{modulo} -> page.tsx -> configuracion-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla configuracion (clave/valor), schema, endpoints `/v1/config/`.

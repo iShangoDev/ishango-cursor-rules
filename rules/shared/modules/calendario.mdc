@@ -1,0 +1,25 @@
+---
+description: Módulo Calendario ERP — agenda transversal por módulo
+globs: ["src/components/calendario/**/*.tsx", "src/components/calendario/**/*.ts", "src/app/(private)/app/calendario/**/*.tsx", "src/app/api/calendario/**/*.ts"]
+---
+
+# Módulo Calendario — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: Calendar
+- Referencia principal: `src/components/dashboard/calendar/calendar-view.tsx`
+- Referencia secundaria: `src/components/dashboard/calendar/event-dialog.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Vista agenda (month/week/day) con eventos vinculables a entidad.
+
+## Flujo obligatorio
+`Motor -> /api/calendario -> page.tsx -> calendario-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla, schema, endpoints `/v1/calendario/`.

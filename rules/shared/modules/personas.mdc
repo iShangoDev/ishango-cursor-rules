@@ -1,0 +1,233 @@
+---
+description: Agente Módulo Personas — aplica cuando Cursor edita archivos del módulo personas en ERP o Motor
+globs: [
+  "src/components/personas/**/*.tsx",
+  "src/components/personas/**/*.ts",
+  "src/app/(private)/app/personas/**/*.tsx",
+  "src/app/api/personas/**/*.ts",
+  "app/modules/personas/**/*.py"
+]
+---
+
+# Módulo Personas — iShango Sistema
+
+Gestión de personas físicas del sistema. Entidad base que otros módulos referencian (crédito, cobranza, etc.). Una persona es cualquier individuo registrado, independientemente de su rol en el negocio. Primer módulo de negocio completo en ERP — patrón de referencia para CRUD Lista Simple.
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Crea** — alta de persona nueva
+- **Modifica** — actualización de datos de contacto y estado
+- **Elimina** — soft delete (baja lógica)
+- **Lee** — listado paginado con filtros, detalle por ID
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Tabla única
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `personas` | Persona física con datos de identificación y contacto | — |
+
+### Modelo SQLModel
+
+```python
+class Persona(SQLModel, table=True):
+    __tablename__ = "personas"
+    id: uuid.UUID = Field(default_factory=uuid4, primary_key=True)
+    nombre: str = Field(index=True)
+    apellido: str = Field(index=True)
+    documento: str = Field(unique=True, index=True)  # DNI/CUIT
+    tipo_documento: TipoDocumento = Field(default=TipoDocumento.dni)
+    email: str | None = Field(default=None)
+    telefono: str | None = Field(default=None)
+    direccion: str | None = Field(default=None)
+    activo: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    deleted_at: datetime | None = Field(default=None)
+
+class TipoDocumento(str, Enum):
+    dni = "dni"
+    cuit = "cuit"
+    pasaporte = "pasaporte"
+```
+
+### Schemas
+
+```python
+class PersonaCreate(BaseModel):
+    nombre: str
+    apellido: str
+    documento: str
+    tipo_documento: TipoDocumento = TipoDocumento.dni
+    email: str | None = None
+    telefono: str | None = None
+    direccion: str | None = None
+
+class PersonaUpdate(BaseModel):
+    nombre: str | None = None
+    apellido: str | None = None
+    email: str | None = None
+    telefono: str | None = None
+    direccion: str | None = None
+    activo: bool | None = None
+
+class PersonaRead(BaseModel):
+    id: str
+    nombre: str
+    apellido: str
+    documento: str
+    tipo_documento: TipoDocumento
+    email: str | None
+    telefono: str | None
+    direccion: str | None
+    activo: bool
+    created_at: datetime
+    updated_at: datetime
+```
+
+### Migración
+
+```
+migrations/versions/20250227_add_personas_table.py
+```
+Índices: `ix_personas_nombre`, `ix_personas_apellido`, `ix_personas_documento` (unique)
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD estándar
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | `/v1/personas/` | Listado paginado con filtros | ✅ |
+| POST | `/v1/personas/` | Crear persona | ✅ |
+| GET | `/v1/personas/{id}` | Detalle por ID | ✅ |
+| PATCH | `/v1/personas/{id}` | Actualizar parcial | ✅ |
+| DELETE | `/v1/personas/{id}` | Soft delete | ✅ |
+
+### ListParams soportados
+
+```
+GET /v1/personas/?page=1&size=25&sort=nombre&nombre=&documento=&activo=true
+```
+
+### Registro en main.py
+
+```python
+from app.modules.personas.router import router as personas_router
+app.include_router(personas_router, prefix="/v1")
+# router = APIRouter(prefix="/personas", tags=["Personas"])
+```
+
+---
+
+## Motor — Reglas de negocio
+
+1. `documento` es único en el sistema — no pueden existir dos personas con el mismo documento
+2. Crear con documento existente → HTTP 409 `"Ya existe una persona con ese documento"`
+3. DELETE es siempre soft delete — setea `deleted_at`, nunca elimina el registro de la DB
+4. GET listado excluye `deleted_at != null` por defecto. `?incluir_eliminados=true` los incluye
+5. PATCH no permite modificar `documento` ni `tipo_documento` — son inmutables post-creación
+6. `updated_at` se actualiza en cada PATCH
+7. Todos los endpoints requieren token JWT válido (`Authorization: Bearer`)
+8. `nombre` y `apellido` son obligatorios — no pueden quedar vacíos en PATCH
+
+### Archivos del módulo Motor
+
+```
+app/modules/personas/
+├── __init__.py
+├── model.py         # Persona SQLModel + TipoDocumento enum
+├── schema.py        # PersonaCreate, PersonaUpdate, PersonaRead
+├── repository.py    # PersonaRepository: CRUD + filtros
+├── service.py       # PersonaService: reglas de negocio
+└── router.py        # Endpoints — prefix="/personas"
+```
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy puro
+
+- GET `/api/personas?page=1&size=25&...` → forwardea al Motor
+- POST `/api/personas` → `PersonaCreatePayload`
+- GET `/api/personas/[id]` → detalle
+- PATCH `/api/personas/[id]` → `PersonaUpdatePayload`
+- DELETE `/api/personas/[id]` → soft delete
+
+Todos usan `motorFetch` y `getMotorUrl()`.
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** List only (CRUD vía modales)
+
+```
+/app/personas     ← listado con modales crear/editar
+```
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** CRUD Lista Simple
+**Referencia:** `components/dashboard/customer/`
+**Patrón listado:** Lista paginada
+
+### Estructura de archivos ERP
+
+```
+src/
+├── app/
+│   ├── (private)/app/personas/
+│   │   └── page.tsx                    ← Server Component
+│   └── api/personas/
+│       ├── route.ts                    ← GET list + POST create
+│       └── [id]/
+│           └── route.ts               ← GET detail + PATCH + DELETE
+├── components/personas/
+│   ├── personas-view.tsx              ← Client — estado local, permisos
+│   ├── personas-table.tsx             ← tabla MUI
+│   ├── personas-form.tsx              ← form crear/editar (React Hook Form + Zod)
+│   ├── persona-crear-modal.tsx        ← modal crear
+│   ├── persona-editar-modal.tsx       ← modal editar
+│   ├── personas.types.ts             ← tipos TS (espejo Motor)
+│   └── use-personas.ts                ← mutations BFF
+```
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** CRUD básico
+
+`puedeHacer('personas', 'create')`, `puedeHacer('personas', 'edit')`, `puedeHacer('personas', 'delete')`
+
+El Motor devuelve permisos `["read","create","edit","delete"]` — usar "edit" (no "update").
+Pasar `canCreate`, `canEdit`, `canDelete` a hijos. Solo llamar `puedeHacer()` en `personas-view.tsx`.
+
+---
+
+## Decisiones técnicas
+
+- `documento` y `tipo_documento` deshabilitados en edición — son inmutables post-creación
+- Tras create: **prepend** en el array local (no refetch). Tras update: reemplazar. Tras delete: remover.
+- `nombre` + `apellido` separados: permite ordenar y filtrar por apellido
+- Soft delete: personas pueden tener historial en créditos — nunca eliminar físicamente
+- `activo` bool separado de `deleted_at`: `activo=False` = deshabilitado operacionalmente
+
+---
+
+## Mejoras posibles
+
+- Filtros: búsqueda por nombre, estado — ver `_devias-kit/components/customer/customers-filters.tsx`
+- Paginación: cuando el listado crezca — ver `customers-pagination.tsx`
+- Layout: Card contenedor con Divider entre filtros y tabla — ver `app/customers/page.tsx`

@@ -1,0 +1,25 @@
+---
+description: Módulo Jobs ERP — operación de tareas programadas
+globs: ["src/components/jobs/**/*.tsx", "src/components/jobs/**/*.ts", "src/app/(private)/app/jobs/**/*.tsx", "src/app/api/jobs/**/*.ts"]
+---
+
+# Módulo Jobs — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: Jobs dashboard
+- Referencia principal: `src/components/dashboard/jobs/jobs-filters.tsx`
+- Referencia secundaria: `src/components/dashboard/jobs/activity-item.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Tabla + filtros + estado de ejecución/errores para observabilidad operativa.
+
+## Flujo obligatorio
+`Motor -> /api/jobs -> page.tsx -> jobs-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla, schema, endpoints `/v1/jobs/`.

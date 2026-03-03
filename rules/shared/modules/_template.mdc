@@ -1,0 +1,31 @@
+---
+description: Módulo Template — solo para CRUD genérico en /app/modelos/crud. NO usar para crear módulos nuevos.
+globs: ["src/components/_template/**/*.tsx", "src/components/_template/**/*.ts", "src/app/api/template/**/*.ts"]
+---
+
+# Módulo Template — iShango ERP
+
+## Descripción
+
+CRUD genérico visible en `/app/modelos/crud`. BFF en `api/template/`.
+
+**NO usar para crear módulos nuevos.** Para crear un módulo: seguir `erp-crear-modulo.mdc` y extender desde el modelo elegido (customer, order, invoice, etc.) en `components/dashboard/`.
+
+## Estructura
+
+```
+src/components/_template/
+├── template.types.ts
+├── template-view.tsx
+├── template-table.tsx
+├── template-form.tsx
+├── template-crear-modal.tsx
+├── template-editar-modal.tsx
+├── use-template.ts
+└── README.md
+```
+
+## Uso
+
+- **Para /app/modelos/crud:** Este template renderiza el CRUD genérico
+- **Para crear módulo nuevo:** Consultar `erp-crear-modulo.mdc` — extender desde el modelo del diccionario (customer, order, etc.), NO copiar _template

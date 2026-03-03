@@ -1,0 +1,159 @@
+---
+description: Agente Performance ERP — aplica cuando Cursor edita vistas con múltiples fetches, useEffect con dependencias en cascada, o componentes que hacen N requests al montar
+globs: ["src/components/**/*-view.tsx", "src/components/**/*-detail*.tsx", "src/app/api/**/*.ts"]
+---
+
+# Performance de Fetches — iShangoERP
+
+## Problema que este archivo previene
+
+Vistas que hacen múltiples requests al montar dan la sensación de "todo cargando a la vez". Los dos antipatrones más comunes en este proyecto:
+
+1. **N+1**: un fetch inicial devuelve N ids → N fetches adicionales por cada id
+2. **Cascada implícita**: useEffect A llena estado → useEffect B depende de ese estado → dos ciclos de loading
+
+---
+
+## Antipatrón 1 — N+1 requests ❌
+
+```typescript
+// ❌ MAL — 2 + N requests al montar
+const [rolesRes, modulosRes] = await Promise.all([
+  fetch(`/api/usuario-roles?usuario_id=${id}`),
+  fetch(`/api/empresas/${empresaId}/modulos`),
+]);
+const roles = await rolesRes.json();
+
+// Por cada rol, un fetch adicional
+const permisos = await Promise.all(
+  roles.map((r) => fetch(`/api/roles/${r.rol_id}`))
+);
+```
+
+```typescript
+// ✅ BIEN — 1 request con datos incluidos + usuario-roles para ids de remove
+const [usuarioRes, usuarioRolesRes] = await Promise.all([
+  fetch(`/api/usuarios/${id}?include=roles`),
+  fetch(`/api/usuario-roles?usuario_id=${id}&empresa_id=${empresaId}`),
+]);
+// Merge: roles de usuario con ids de usuario-roles para removeRol()
+```
+
+**Regla:** Si un fetch inicial devuelve IDs que requieren fetches adicionales,
+mover la lógica al Motor con `?include=` o un endpoint dedicado.
+
+## Antipatrón 2 — Cascada implícita de useEffect ❌
+
+```typescript
+// ❌ MAL — dos useEffect con dependencia implícita
+useEffect(() => { fetchModulos(); }, [fetchModulos]);
+useEffect(() => { fetchRoles(); }, [fetchRoles]); // depende de modulos
+```
+
+```typescript
+// ✅ BIEN — un único useEffect secuencial explícito
+useEffect(() => {
+  if (!empresaId) return;
+  let cancelled = false;
+  const cargarDatos = async () => {
+    setLoading(true);
+    try {
+      const resA = await fetch(`/api/empresas/${empresaId}/modulos`);
+      if (cancelled) return;
+      const modulosList = await resA.json();
+      setModulos(modulosList);
+      const moduloId = modulosList[0]?.id;
+      if (!moduloId) return;
+      const resB = await fetch(`/api/roles?modulo_id=${moduloId}`);
+      if (cancelled) return;
+      setRoles(await resB.json());
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
+  };
+  void cargarDatos();
+  return () => { cancelled = true; };
+}, [empresaId, filters.modulo_id]);
+```
+
+**Regla:** Si useEffect B depende del estado que llena useEffect A,
+colapsar en un único useEffect con función async interna.
+
+## Cuándo usar ?include= en el BFF
+
+```typescript
+// BFF — propagar ?include al Motor
+const { searchParams } = new URL(request.url);
+const include = searchParams.get("include");
+const path = include ? `/v1/usuarios/${id}?include=${include}` : `/v1/usuarios/${id}`;
+return motorFetch(path);
+```
+
+## Patrones de listado
+
+Ver `erp-patrones-lista.mdc` para Lista paginada vs Lista simple vs Batch. Para Lista paginada, usar usePaginatedList (ver plan V0.29).
+
+## Patrón Server fetch + initialData (V1)
+
+Para listas sin dependencias de auth en el fetch inicial (usuarios, personas):
+
+1. **Fetcher server** en `lib/data/{modulo}-server.ts` usando `motorFetch`
+2. **page.tsx** async: `const result = await getXxxListServer(...)` y pasa `initialData`/`initialError` a la View
+3. **View** acepta `initialData?` y `initialError?`; usa como estado inicial; solo fetch en cliente para paginación (page > 0)
+
+```typescript
+// page.tsx (Server Component)
+const result = await getUsuariosListServer({ page: 1, size: 25 });
+return <UsuariosView initialData={result.ok ? result.data : undefined} initialError={result.ok ? undefined : result.error.message} />;
+```
+
+```typescript
+// usuarios-view.tsx
+const [usuarios, setUsuarios] = useState(initialData?.data ?? []);
+const [loading, setLoading] = useState(!initialData && !initialError);
+// Solo fetch cuando page > 0 (paginación)
+const needsClientFetch = !initialData || page > 0;
+```
+
+## Paralelizar cuando hay parámetros en URL
+
+En `roles-view`: si `?modulo_id=X` está en la URL, fetchear modulos y roles en paralelo (no hay dependencia).
+
+## Vistas con fetches optimizados
+
+| Vista | Patrón |
+|-------|--------|
+| `usuarios-view` | Server fetch + initialData; lazy modales |
+| `personas-view` | Server fetch + initialData; lazy modales |
+| `usuario-detail-view` | 2 requests paralelos; lazy AsignarRolModal |
+| `roles-view` | Paralelo modulos+roles si modulo_id en URL; secuencial si no; lazy modales |
+
+## Caché de módulos con React Query (V0.11)
+
+Para listas que navegan entre módulos (usuarios, personas, roles):
+
+1. **useQuery** en lugar de useState + useEffect
+2. **queryKey** por ruta + params: `["usuarios", { page, size }]`, `["personas", { page, size, ...filters }]`, `["roles", "list", { empresa_id, modulo_id }]`
+3. **staleTime** 60s (QueryProvider defaultOptions)
+4. **initialData** desde page.tsx cuando aplica (server fetch)
+5. **Invalidar** tras mutations: `queryClient.invalidateQueries({ queryKey: xxxQueryKey.all })`
+6. **Prefetch al hover** en sidebar: `usePrefetchModule(href)` con debounce 250ms
+
+Ver `usuarios-view`, `personas-view`, `roles-view` y `use-prefetch-module.ts`.
+
+## Señales de que una vista necesita optimización
+
+- Más de 2 requests en Network al navegar a la vista
+- Dos ciclos de loading visibles (spinner → datos → spinner → datos)
+- `Promise.all` seguido de loop de fetches por cada item
+- Dos `useEffect` donde uno depende del estado que llena el otro
+
+## Gate de performance obligatorio
+
+Para cambios en vistas privadas o BFF:
+
+```powershell
+npm run lighthouse
+```
+
+Si los umbrales definidos en Lighthouse no pasan, no cerrar la iteración.

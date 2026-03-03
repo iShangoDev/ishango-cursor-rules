@@ -1,0 +1,181 @@
+---
+description: Catálogo de modelos Devias — qué patrón extender según el tipo de módulo
+globs: ["src/_devias-kit/**/*.tsx", "src/components/**/*.tsx", "src/app/(private)/app/**/*.tsx"]
+alwaysApply: false
+---
+
+# Catálogo de Modelos Devias — iShango ERP
+
+## _devias-kit = devias-kit
+
+Mismo concepto. El prefijo `_` indica exclusión del build.
+
+## Ver en vivo
+
+**Módulo de Modelos:** `/app/modelos` — customers, orders, invoices, products, jobs, tasks, mail, calendar, blog, academy, chat, social, file-storage, analytics, logistics, e-commerce, crypto, settings, i18n, crud.
+
+Al crear un módulo nuevo, elegir el **modelo** que mejor encaje. **Extender** = generar nuevo componente copiando/adaptando patrones del modelo elegido. **NO usar _template** para crear módulos.
+
+## Patrones de listado (volumen de datos)
+
+Antes de elegir modelo, consultar `erp-patrones-lista.mdc` para decidir:
+- Lista paginada (>100 reg) vs Lista simple (<=50 reg) vs Batch.
+
+## Matriz de decisión rápida
+
+| Si tu módulo es… | Modelo | Extender desde |
+|------------------|--------|----------------|
+| Lista de entidades con tabla | CRUD Lista Simple | components/dashboard/customer/, order/ |
+| Créditos (lista + detalle cuotas/pagos) | Detalle Subentidades | customers/[id], orders/[id] |
+| Lista con métricas y vista agrupada | CRUD con Stats | components/dashboard/invoice/ |
+| Reportes, KPIs, monitoreo | Dashboard Métricas | analytics/ o logistics/ |
+| Conversaciones, mensajes | Master-Detail Drawer | mail/ |
+| Pipeline por estados (tareas, órdenes) | Kanban | tasks/ |
+| Catálogo, galería, exploración | Grid de Cards | jobs/, blog/, academy/, file-storage/ |
+| Detalle rico con secciones | Detalle Subentidades | customers/[id], orders/[id] |
+| Creación compleja en pasos | Form Multi-Step | jobs/job-create-form |
+| Eventos, citas, turnos | Calendario | calendar/ |
+| Factura, remito, documento | Documento | invoice/[id], invoice-pdf-document |
+| Configuración, preferencias | Settings | settings/ |
+
+---
+
+## Modelos — descripción y referencia
+
+### 1. CRUD Lista Simple
+
+**Cuándo usar:** Entidad principal con listado tabular, filtros básicos (estado, búsqueda), sin subentidades complejas.
+
+**Referencia Devias:** `components/customer/`, `order/`, `product/`
+
+**Estructura:** Tabla + filtros inline + paginación + CTA Crear. Modal preview o página `/create`.
+
+**iShango:** Extender desde `components/dashboard/customer/` o `order/`. Personas es referencia implementada. Usar Lista paginada si >100 registros; ver erp-patrones-lista.mdc.
+
+---
+
+### 2. CRUD con Stats y Vista Alternativa
+
+**Cuándo usar:** Listado que requiere métricas resumen (totales, por estado) y/o vista agrupada (por fecha, cliente).
+
+**Referencia Devias:** `components/invoice/`
+
+**Estructura:** Stats cards arriba, filtros en drawer lateral, toggle list/group.
+
+**iShango:** Extender desde `components/dashboard/invoice/` (InvoicesStats, InvoicesFiltersCard, ViewModeButton).
+
+---
+
+### 3. Dashboard de Métricas
+
+**Cuándo usar:** Reportes, KPIs, monitoreo. No es CRUD de entidades.
+
+**Referencia Devias:** `components/analytics/`, `logistics/`, `e-commerce/`, `crypto/`
+
+**Estructura:** Grid de cards con métricas, gráficos. Sin tabla principal.
+
+**iShango:** No usar _template. Crear vista desde cero siguiendo analytics o logistics.
+
+---
+
+### 4. Master-Detail con Drawer
+
+**Cuándo usar:** Lista de conversaciones, mensajes, documentos donde el detalle se muestra en el mismo layout sin navegar.
+
+**Referencia Devias:** `components/mail/`
+
+**Estructura:** Sidebar con lista, panel principal con detalle, drawer colapsable en mobile.
+
+**iShango:** No usar _template. Usar ThreadsView, ThreadView, layout de mail como base.
+
+---
+
+### 5. Kanban
+
+**Cuándo usar:** Flujos con estados (pipeline), gestión de tareas, órdenes por etapa.
+
+**Referencia Devias:** `components/tasks/`
+
+**Estructura:** Board con columnas, cards arrastrables, TaskModal, ColumnModal.
+
+**iShango:** No usar _template. Usar TasksProvider, BoardView, TaskModal como base.
+
+---
+
+### 6. Grid de Cards
+
+**Cuándo usar:** Catálogo, galería, exploración. No tabla densa.
+
+**Referencia Devias:**
+- `jobs/` — browse empresas con jobs
+- `blog/` — posts con PostCard
+- `academy/` — cursos con CourseCard
+- `file-storage/` — items con grid/list toggle, upload
+
+**iShango:** Elegir variante según dominio. No usar _template para grid puro.
+
+---
+
+### 7. Detalle con Subentidades
+
+**Cuándo usar:** Entidad con muchas secciones relacionadas (persona con pagos, direcciones; orden con ítems, timeline).
+
+**Referencia Devias:** `app/customers/[customerId]/`, `orders/[orderId]/`
+
+**Estructura:** Grid 4/8: columna izquierda (info básica), derecha (Payments, Billing, Shipping). PropertyList, LineItemsTable, EventsTimeline.
+
+**iShango:** Crear página detalle siguiendo layout de customer u order.
+
+---
+
+### 8. Form Multi-Step (Stepper)
+
+**Cuándo usar:** Creación compleja con muchos campos, agrupados en pasos lógicos.
+
+**Referencia Devias:** `components/jobs/job-create-form.tsx`
+
+**Estructura:** Stepper vertical, pasos (Category → Details → Description), preview final.
+
+**iShango:** Usar JobCreateForm como patrón. Crear pasos propios.
+
+---
+
+### 9. Calendario
+
+**Cuándo usar:** Eventos, citas, turnos, planificación.
+
+**Referencia Devias:** `components/calendar/`
+
+**Estructura:** CalendarView, CalendarProvider, eventos con start/end.
+
+**iShango:** No usar _template. Usar calendar como base.
+
+---
+
+### 10. Documento / Factura
+
+**Cuándo usar:** Facturas, remitos, documentos imprimibles.
+
+**Referencia Devias:** `app/invoices/[invoiceId]/`, `invoice-pdf-document`
+
+**Estructura:** Layout documento formal, LineItemsTable, totales, link PDF.
+
+**iShango:** Usar invoice detail y InvoicePDFDocument como base.
+
+---
+
+### 11. Settings (Secciones)
+
+**Cuándo usar:** Configuración, preferencias, perfil.
+
+**Referencia Devias:** `components/settings/`
+
+**Estructura:** Stack de secciones, formularios por sección. Sin tabla.
+
+**iShango:** No usar _template. Usar settings como base.
+
+---
+
+## Documentación completa
+
+Ver `docs/DEVias-Modelos-Modulos.md` para el plan detallado y análisis de cada módulo Devias.

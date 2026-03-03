@@ -1,0 +1,120 @@
+---
+description: Resumen ejecutivo — 9 dimensiones de un módulo iShango. Respuestas rápidas.
+globs: []
+alwaysApply: false
+---
+
+# Dimensiones de un Módulo — Resumen Ejecutivo
+
+Respuestas rápidas. Detalle en `ishango-dimensiones.mdc`.
+
+---
+
+## 1. Datos — ¿Qué patrones hay?
+
+Tablas propias en **iShangoMotor**. El ERP no tiene DB de negocio propia.
+
+| Patrón | Cuándo |
+|--------|--------|
+| Tabla única | Entidad simple |
+| Principal + detalle | Crédito + cuotas |
+| Principal + estados | Historial, trazabilidad |
+| Junction | Many-to-many |
+
+---
+
+## 2. Comportamiento — ¿Qué hace con los datos?
+
+| Patrón | Cuándo |
+|--------|--------|
+| Solo lee | Dashboard, reporte |
+| CRUD puro | Crear, modificar, eliminar |
+| Import | Recibe archivo/batch, normaliza |
+| Export | Transfiere a externo |
+| Crea + transfiere | Genera y envía |
+| Pipeline completo | Recibe + crea + modifica |
+
+---
+
+## 3. API Motor — ¿Qué endpoints?
+
+| Patrón | Endpoints |
+|--------|-----------|
+| CRUD estándar | list, create, detail, update, delete |
+| CRUD + acciones | + aprobar, rechazar, liquidar |
+| Solo lectura | GET list + GET detail |
+| Import | POST con archivo |
+| Export | GET con formato |
+
+---
+
+## 4. BFF — ¿Cómo proxy?
+
+| Patrón | Cuándo |
+|--------|--------|
+| Proxy puro | Mayoría |
+| Proxy + transformación | Auth, adaptar shape |
+| Proxy + agregación | Combinar endpoints |
+
+---
+
+## 5. Root URL — ¿Qué rutas?
+
+| Patrón | Rutas |
+|--------|-------|
+| List only | /app/{modulo} |
+| List + create | + /app/{modulo}/create |
+| List + detail | + /app/{modulo}/[id] |
+| List + detail + edit | + /app/{modulo}/[id]/edit |
+| Completo | list + create + detail + edit |
+
+---
+
+## 6. Frontend — ¿Qué modelo Devias?
+
+Ver `erp-devia-models.mdc`. Resumen:
+
+| Modelo | Para |
+|--------|------|
+| CRUD Lista Simple | Tabla + filtros + modales |
+| Detalle Subentidades | Tabs, secciones |
+| CRUD con Stats | Métricas + agrupado |
+| Kanban | Pipeline estados |
+| Calendario | Eventos, citas |
+| Settings | Config por secciones |
+
+**Listado:** Lista paginada (>100) | Lista simple (≤50) | Batch — ver `erp-patrones-lista.mdc`
+
+---
+
+## 7. Permisos — ¿Qué patrón RBAC?
+
+| Patrón | Permisos |
+|--------|----------|
+| Solo read | read |
+| CRUD básico | read, create, edit, delete |
+| CRUD + acciones | + aprobar, rechazar, etc. |
+| Admin only | Sin granulares |
+
+---
+
+## 8. Cursor (.mdc) — ¿Estructura?
+
+Un solo `.mdc` por módulo con secciones para **ambas caras** (Motor + ERP):
+- Comportamiento declarado
+- Motor (datos, API, reglas)
+- ERP (BFF, root URL, frontend)
+- Permisos, decisiones técnicas, mejoras
+
+Globs cubren paths de Motor (`app/modules/{modulo}/**/*.py`) y ERP (`src/components/{modulo}/**`).
+
+---
+
+## 9. Documentación — ¿Qué artefactos?
+
+| Artefacto | Dónde |
+|-----------|-------|
+| Plan | docs/solicitud-implementacion/ |
+| Resultado | docs/resultado-implementacion/ |
+| CHANGELOG | raíz |
+| .mdc módulo | .cursor/rules/modules/{modulo}.mdc |

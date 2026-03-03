@@ -1,0 +1,80 @@
+---
+description: Logs en Vercel y troubleshooting de deploy — fuente de verdad para captura de logs y errores de build.
+globs: ["**/app/api/**/*.ts", "**/lib/motor-fetch.ts", "**/lib/server-logger.ts"]
+alwaysApply: false
+---
+
+# iShango ERP — Logs Vercel y Troubleshooting
+
+## Fuente de verdad
+
+Esta regla es la autoridad para captura de logs en Vercel y resolución de errores de deploy.
+
+## Captura de logs en Vercel
+
+### Dónde ver los logs
+
+1. **Build:** Vercel Dashboard → Proyecto → Deployments → [deploy] → **Building**
+2. **Runtime (Functions):** Deployments → [deploy] → **Functions** → [ruta, ej. /api/auth/login] → **View logs**
+3. **Logs en tiempo real:** Project Settings → Logs (si está habilitado)
+
+### Convención de logging en API routes
+
+Usar `createServerLogger` de `@/lib/server-logger` en todas las API routes que llaman al Motor o manejan errores:
+
+```typescript
+import { createServerLogger } from "@/lib/server-logger";
+
+const log = createServerLogger("api/auth/login");
+
+// En catch o cuando response.ok === false:
+log.error("Motor no disponible", { status: response.status, url });
+```
+
+**Formato en Vercel:** Los logs aparecen como `[api/auth/login] ERROR ...`. Buscar por el prefijo en el dashboard.
+
+### Qué loguear
+
+| Situación | Nivel | Ejemplo |
+|-----------|-------|---------|
+| Error de red al Motor | error | `log.error("fetch Motor failed", { path, err: err.message })` |
+| Respuesta 5xx del Motor | error | `log.error("Motor 5xx", { path, status })` |
+| Config faltante | error | `log.error("MOTOR_URL no configurada")` |
+| Validación fallida | warn | `log.warn("Validation failed", { field })` |
+
+**No loguear:** Datos sensibles (passwords, tokens), PII completo.
+
+## Error "We encountered an internal error" tras Deploying outputs
+
+El build termina correctamente; el fallo ocurre al subir artefactos a la CDN.
+
+| Paso | Acción |
+|------|--------|
+| 1 | Redeploy (puede ser transitorio) |
+| 2 | `engines.node` en package.json debe coincidir con Project Settings (24.x) |
+| 3 | Agregar `VERCEL_ANALYZE_BUILD_OUTPUT=1` en Env Vars y redeploy; revisar reporte de tamaño |
+| 4 | [vercel-status.com](https://www.vercel-status.com/) |
+| 5 | Contactar soporte Vercel con Deployment ID |
+
+## Protocolo de recuperación (restore first)
+
+Cuando producción/preview no levantan y el fallo ocurre después de `Build Completed`:
+
+1. Restaurar baseline estable en rama `hotfix/vercel-restore-*`.
+2. Confirmar deploy `Ready`.
+3. Hacer bisect por lotes en ramas `audit/lote-a-*`, `audit/lote-b-*`, `audit/lote-c-*`.
+4. Guardar evidencia (Deployment ID + SHA) por cada intento.
+
+No mezclar cambios de negocio y cambios de deploy en el mismo lote de auditoría.
+
+## Variables de entorno para logs
+
+| Variable | Uso | Dónde |
+|----------|-----|-------|
+| `VERCEL_ANALYZE_BUILD_OUTPUT` | Reporte tamaño build | Vercel Dashboard (diagnóstico) |
+| `LOG_LEVEL` | Nivel server (ERROR, WARN, DEBUG) | Opcional; server-logger respeta |
+
+## Referencias
+
+- [workflow.mdc](workflow.mdc) — Deploy, ramas, validate:ux
+- [docs/TROUBLESHOOTING-VERCEL-ERP.md](../../docs/TROUBLESHOOTING-VERCEL-ERP.md) — Detalle extendido

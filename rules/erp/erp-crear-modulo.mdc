@@ -1,0 +1,130 @@
+---
+description: OBLIGATORIO — Proceso de modelado para crear módulos nuevos. SE DEBE respetar. Consultar ANTES de implementar.
+globs: ["src/components/**/*", "src/app/(private)/app/**/*", "src/app/api/**/*"]
+alwaysApply: false
+---
+
+# Crear Módulo Nuevo — Proceso de Modelado (OBLIGATORIO)
+
+**Este proceso es MANDATORIO.** No hay excepciones. Antes de escribir código de un módulo nuevo: seguir el flujo completo.
+
+---
+
+## Regla obligatoria
+
+| Quién | Obligación |
+|-------|------------|
+| **Desarrollador / IA** | Antes de crear un módulo: consultar diccionario → elegir modelo → ver en vivo → extender modelo elegido → documentar |
+| **Checklist** | No se considera implementado hasta que exista `{modulo}.mdc` con sección "Modelo extendido" |
+
+**NO copiar _template.** La estructura viene del modelo elegido (customer, order, invoice, etc.).
+
+---
+
+## Flujo obligatorio
+
+```
+0. Consultar ishango-dimensiones.mdc — marco de 9 dimensiones y catálogo de patrones
+1. Definir el módulo (nombre, entidad, tipo de vista)
+2. Consultar DICCIONARIO (erp-devia-models.mdc) → elegir modelo que encaje
+3. Ver el modelo en vivo → /app/modelos (customers, orders, etc.)
+4. Extender desde el modelo elegido (components/dashboard/customer/, order/, etc.)
+   — NO copiar _template
+5. Crear page.tsx, BFF, types según erp-root
+6. Documentar en {modulo}.mdc el modelo extendido
+```
+
+---
+
+## Paso 0 — Consultar marco de dimensiones
+
+Consultar **`ishango-dimensiones.mdc`** (o su resumen en `ishango-dimensiones-resumen.mdc`) para ver el catálogo de patrones por dimensión (Datos, Comportamiento, API Motor, BFF, Root URL, Frontend, Permisos, .mdc, Documentación). Usar **`ishango-orquestador.mdc`** para el cuestionario interactivo que navega las 9 dimensiones.
+
+---
+
+## Paso 1 — Definir el módulo
+
+| Campo | Ejemplo |
+|-------|---------|
+| Nombre | `roles`, `usuarios`, `cobranza` |
+| Entidad principal | Rol, Usuario, Deudor |
+| Tipo de vista | Lista tabla, detalle con tabs, etc. |
+
+---
+
+## Paso 2 — Elegir modelo (diccionario)
+
+Consultar `erp-patrones-lista.mdc` para elegir patrón de listado (paginada/simple/batch).
+
+Consultar la **matriz de decisión** en `erp-devia-models.mdc`:
+
+| Si tu módulo es… | Modelo | Extender desde |
+|------------------|--------|----------------|
+| Lista de entidades con tabla | CRUD Lista Simple | components/dashboard/customer/, order/ |
+| Lista con métricas y vista agrupada | CRUD con Stats | components/dashboard/invoice/ |
+| Detalle rico con secciones/tabs | Detalle Subentidades | customers/[id], orders/[id] |
+| … | Ver matriz completa | erp-devia-models.mdc |
+
+**Regla:** Anotar el modelo elegido. Será obligatorio documentarlo en el `.mdc` del módulo.
+
+---
+
+## Paso 3 — Ver en vivo
+
+Ir a **`/app/modelos`** en la app y navegar al modelo elegido (ej. customers, orders).
+
+Revisar: tabla, filtros, modales, layout de detalle.
+
+---
+
+## Paso 4 — Extender desde el modelo elegido (NO _template)
+
+| Fuente | Propósito |
+|--------|-----------|
+| **`components/dashboard/{modelo}/`** | Patrones de diseño (tabla, filtros, Card, layout). Adaptar al módulo. |
+| **`_devias-kit/components/{modelo}/`** | Referencia alternativa (excluida del build) |
+| **`components/personas/`** | Si es CRUD Lista Simple, Personas ya implementado puede servir de referencia |
+
+**Pasos concretos:**
+1. Crear `components/{modulo}/` siguiendo el patrón del modelo elegido (customer, order, etc.)
+2. Nombres: `{modulo}-view.tsx`, `{modulo}-table.tsx`, `{modulo}-form.tsx`, etc. (erp-root)
+3. Crear `app/(private)/app/{modulo}/page.tsx`
+4. Crear `app/api/{modulo}/` (BFF)
+5. Crear `{modulo}.types.ts` (espejo del Motor)
+
+---
+
+## Paso 5 — Documentar modelo extendido
+
+En `.cursor/rules/modules/{modulo}.mdc` agregar:
+
+```markdown
+## Modelo extendido
+- **Modelo Devias:** [CRUD Lista Simple | Detalle Subentidades | etc.]
+- **Referencia:** components/dashboard/[customer|order|...]
+- **Patrón listado:** [Lista paginada | Lista simple | Batch]
+- **Patrón:** [descripción breve]
+```
+
+---
+
+## Checklist pre-implementación
+
+- [ ] Modelo elegido en erp-devia-models.mdc
+- [ ] Modelo visto en vivo en /app/modelos
+- [ ] Componentes creados siguiendo el patrón del modelo elegido (NO _template)
+- [ ] Estructura según erp-root (view, table, form, types, use-{modulo})
+- [ ] {modulo}.mdc creado con sección "Modelo extendido"
+
+---
+
+## Referencias
+
+- `ishango-dimensiones.mdc` — Marco de 9 dimensiones, catálogo de patrones (paso 0)
+- `ishango-dimensiones-resumen.mdc` — Resumen ejecutivo de patrones
+- `ishango-orquestador.mdc` — Cuestionario interactivo de creación de módulo
+- `ishango-diccionario.mdc` — Glosario canónico de términos
+- `erp-devia-models.mdc` — Diccionario de modelos Devias (matriz de decisión)
+- `docs/DEVias-Modelos-Modulos.md` — Catálogo detallado
+- `docs/TERMINOLOGIA-iShango-ERP.md` — Flujo de modelado
+- `erp-root.mdc` — Estructura, naming, BFF

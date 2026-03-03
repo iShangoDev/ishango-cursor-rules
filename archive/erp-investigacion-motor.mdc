@@ -1,0 +1,35 @@
+---
+description: Incluir Motor en investigación y planes — consistencia cross-repo
+globs: ["docs/investigacion/**/*.md", "docs/solicitud-implementacion/**/*.md", "docs/mejoras/**/*.md"]
+alwaysApply: false
+---
+
+# Investigación y planes — consistencia con Motor
+
+## Regla
+
+Cuando se realice **investigación** o **plan de implementación** en el ERP:
+
+1. **Leer** el proyecto Motor en `C:\dev\ishango-motor` (solo lectura).
+2. **Consultar** `docs/mejoras/lista-consolidada-v1.md` y `docs/investigacion/` del Motor.
+3. **Si los cambios afectan al Motor** (nuevos endpoints, formato de respuesta, auth, etc.):
+   - Evaluar si la mejor implementación está en Motor o en ERP.
+   - Si corresponde al Motor: documentar en `docs/solicitud-implementacion-erp/` del Motor y crear plan en ERP como request del Motor.
+4. **Mantener consistencia** entre listas consolidadas de ambos proyectos.
+
+## Checklist cuando Motor impacta ERP
+
+1. [ ] Crear en Motor: `docs/solicitud-implementacion-erp/V{X.Y}-Plan-Implementacion-ERP.md`
+2. [ ] Crear en ERP: `docs/solicitud-implementacion/V{X.Y}-Plan-Implementacion.md` con primera línea: `> **Request del Motor:** Este plan es una solicitud del repo iShangoMotor (V{X.Y})...`
+3. [ ] Actualizar `docs/solicitud-implementacion-erp/README.md` en Motor
+4. [ ] Actualizar `docs/solicitud-implementacion/README.md` en ERP
+5. [ ] Si hay cambios en tipos/respuestas: actualizar `{modulo}.types.ts` en ERP
+
+## Referencias Motor
+
+| Recurso | Ruta |
+|---------|------|
+| Lista consolidada | C:\dev\ishango-motor\docs\mejoras\lista-consolidada-v1.md |
+| Investigación | C:\dev\ishango-motor\docs\investigacion\ |
+| Solicitudes ERP | C:\dev\ishango-motor\docs\solicitud-implementacion-erp\ |
+| Auth, RBAC | C:\dev\ishango-motor\app\modules\auth\, app\modules\rbac\ |

@@ -1,0 +1,139 @@
+---
+description: Agente Módulo RBAC Motor — aplica cuando Cursor edita archivos en app/modules/rbac/ o cuando modifica app/modules/auth/service.py
+globs: ["app/modules/rbac/**/*.py", "app/modules/auth/service.py"]
+---
+
+# Módulo RBAC — iShangoMotor
+
+## Descripción
+Sistema de acceso multi-tenant con RBAC dinámico. Una empresa tiene módulos habilitados. Los roles son creados por la empresa. Los permisos son fijos y definidos por el Motor. La asignación es usuario + empresa + módulo + rol.
+
+## Tablas
+
+| Tabla | Descripción | FKs |
+|-------|-------------|-----|
+| `empresas` | Tenant — una fila por empresa | — |
+| `modulos_sistema` | Catálogo fijo de módulos del Motor | — |
+| `empresa_modulos` | Módulos habilitados por empresa | `empresa_id`, `modulo_id` |
+| `roles` | Dinámicos, creados por empresa por módulo | `empresa_id`, `modulo_id` |
+| `rol_permisos` | Permisos asignados a un rol | `rol_id` |
+| `usuario_roles` | Asignación usuario + empresa + módulo + rol | `usuario_id`, `empresa_id`, `modulo_id`, `rol_id` |
+
+## Catálogo de permisos (fijo — no es tabla)
+```python
+class PermisoEnum(str, Enum):
+    read = "read"
+    create = "create"
+    edit = "edit"
+    delete = "delete"
+    configure = "configure"
+```
+
+## Endpoints
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | `/v1/empresas/` | Listar empresas | ✅ |
+| GET | `/v1/empresas/{id}` | Detalle empresa | ✅ |
+| GET | `/v1/empresas/{id}/modulos` | Módulos habilitados de la empresa | ✅ |
+| GET | `/v1/empresas/{id}/modulos-con-roles` | Módulos + roles en una respuesta (`?modulo_id=` opcional) | ✅ V0.15 |
+| GET | `/v1/roles/` | Listar roles (`?empresa_id=&modulo_id=`) | ✅ |
+| POST | `/v1/roles/` | Crear rol con permisos iniciales | ✅ |
+| GET | `/v1/roles/{id}` | Detalle rol con permisos | ✅ |
+| PATCH | `/v1/roles/{id}` | Actualizar nombre/descripción/activo | ✅ |
+| PUT | `/v1/roles/{id}/permisos` | Reemplazar todos los permisos del rol | ✅ |
+| DELETE | `/v1/roles/{id}` | Soft delete del rol | ✅ |
+| GET | `/v1/usuario-roles/` | Roles de un usuario (`?usuario_id=&empresa_id=`) | ✅ |
+| POST | `/v1/usuario-roles/` | Asignar rol a usuario | ✅ |
+| DELETE | `/v1/usuario-roles/{id}` | Quitar rol de usuario | ✅ |
+
+## Registro en main.py
+```python
+from app.modules.rbac.router_empresas import router as empresas_router
+from app.modules.rbac.router_roles import router as roles_router
+from app.modules.rbac.router_usuario_roles import router as usuario_roles_router
+
+app.include_router(empresas_router, prefix="/v1")
+app.include_router(roles_router, prefix="/v1")
+app.include_router(usuario_roles_router, prefix="/v1")
+```
+
+## Reglas de negocio
+
+1. `PermisoEnum` es enum Python — no tabla de DB. Los permisos son inmutables.
+2. Un rol pertenece a una empresa + módulo — no es global.
+3. El nombre del rol es único por empresa + módulo.
+4. Soft delete en roles. Hard delete en `usuario_roles` — las asignaciones no tienen historial relevante.
+5. Antes de soft delete de un rol: verificar que no tenga `usuario_roles` activos. Si los tiene → HTTP 409.
+6. `PUT /v1/roles/{id}/permisos` elimina todos los `rol_permisos` del rol e inserta los nuevos — operación atómica.
+7. No pueden existir dos `usuario_roles` iguales (mismo usuario + empresa + modulo + rol activo) → HTTP 409.
+8. `dashboard` siempre se incluye con `["read"]` en el login — todo usuario autenticado lo ve.
+9. Endpoints GET de lectura RBAC (`empresas`, `modulos`, `modulos-con-roles`, `roles`) usan caché condicional HTTP: `ETag` + `If-None-Match` (`304` cuando no hay cambios).
+
+## Métodos críticos — repository.py
+
+### get_modulos_con_permisos (V0.9)
+Una query: UsuarioRol → Rol → RolPermiso → ModuloSistema. Agrupar por modulo.nombre en Python. Excluye dashboard (se agrega en auth).
+
+### get_modulos_con_roles_empresa (V0.15)
+Una query con LEFT JOIN: EmpresaModulo → ModuloSistema → Rol → RolPermiso. Devuelve `[{modulo, roles}]`. Sin N+1. Usado por `GET /v1/empresas/{id}/modulos-con-roles`.
+
+### build_conditional_cache (V0.19)
+Helper compartido para hashing de payload y control condicional `ETag` / `If-None-Match` en endpoints GET de RBAC.
+
+### get_usuario_roles_detalle (V0.8)
+Usado por `usuarios/service.get_by_id_con_roles` para `GET /v1/usuarios/{id}?include=roles`.
+
+```python
+def get_usuario_roles_detalle(self, usuario_id: uuid.UUID, empresa_id: uuid.UUID) -> list[dict]:
+    # JOIN único: Rol → UsuarioRol → RolPermiso → ModuloSistema
+    # Filtros: UsuarioRol.usuario_id, empresa_id, activo; Rol.deleted_at.is_(None)
+    # Agrupar permisos por rol en Python — no N queries
+    # Retorna [{"id", "nombre", "descripcion", "modulo_id", "modulo_nombre", "permisos": [...]}]
+```
+
+## Cambio en auth/service.py
+Reemplazar `MODULOS_DEFAULT` hardcodeado:
+```python
+# Usar siempre:
+rbac_repo = RBACRepository(session)
+empresa = rbac_repo.get_empresa_activa_usuario(usuario.id)
+modulos_db = rbac_repo.get_modulos_con_permisos(usuario.id, empresa.id)
+
+# dashboard siempre incluido
+modulos = [ModuloConPermisosRead(nombre="dashboard", permisos=["read"])]
+modulos += [ModuloConPermisosRead(**m) for m in modulos_db]
+```
+
+## Archivos del módulo
+```
+app/modules/rbac/
+├── __init__.py
+├── model.py              # Empresa, ModuloSistema, EmpresaModulo, Rol, RolPermiso, UsuarioRol
+├── schema.py             # EmpresaRead, RolCreate, RolRead, RolUpdate, RolPermisosUpdate, UsuarioRolCreate, UsuarioRolRead
+├── repository.py         # RBACRepository — get_modulos_con_permisos, get_usuario_roles_detalle
+├── service.py            # RBACService — reglas de negocio
+├── router_empresas.py    # prefix="/empresas"
+├── router_roles.py       # prefix="/roles"
+└── router_usuario_roles.py  # prefix="/usuario-roles"
+```
+
+## Migraciones
+```
+migrations/versions/
+├── 20250228_004_add_rbac_tables.py     # Crea las 6 tablas
+├── 20250228_005_seed_rbac_inicial.py   # Empresa iShango + módulos + rol admin + asignación admin@ishango.com
+└── 20260301_006_add_perf_compound_indexes.py  # Índices compuestos performance (RBAC + soft-delete listados)
+```
+
+**Regla seed:** Usar `session.flush()` después de cada INSERT que sea FK de otro. Sin flush el INSERT no se persiste en la transacción Alembic.
+
+---
+
+## ERP — Implementado (via módulo roles y usuarios)
+
+> Los endpoints de este módulo son consumidos por el ERP en dos módulos distintos:
+> - `modules/roles.mdc` — gestión visual de roles RBAC (`/v1/roles/`, `/v1/empresas/*/modulos-con-roles`)
+> - `modules/usuarios.mdc` — detalle de usuario con roles (`/v1/usuarios/{id}?include=roles`, `/v1/usuario-roles/`)
+>
+> No tiene root URL propio en ERP. La lógica RBAC vive embebida en los módulos funcionales.

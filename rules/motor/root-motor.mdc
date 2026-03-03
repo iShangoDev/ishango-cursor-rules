@@ -1,0 +1,104 @@
+---
+description: Agente Global Motor — aplica a todos los archivos .py del repo iShangoMotor
+globs: ["**/*.py"]
+alwaysApply: true
+---
+
+# iShango Motor — Reglas Globales
+
+## Fuente de verdad
+- **`.cursor/rules/`** es la autoridad del proyecto. Si hay conflicto con docs/, prevalece .cursor.
+- Ver `fuente-de-verdad.mdc` para mapeo completo.
+
+## Dónde corre el Motor — REGLA CRITICA
+- **El Motor SOLO corre en Digital Ocean** (159.89.89.130:8001).
+- **Local (c:\dev\ishango-motor):** SOLO hay código/repositorio. NO hay Motor corriendo. NO hay PostgreSQL del Motor.
+- Scripts de migración, validación, tests con DB: ejecutar EN EL SERVIDOR (SSH + docker exec).
+- Nunca asumir que hay Motor o DB local. Todo runtime = Digital Ocean.
+
+## Fuente de datos — REGLA CRITICA
+- Motor es la UNICA base de datos para creditos, personas, cuotas, pagos.
+- Credinter, ERP y demas consumidores consultan SOLO al Motor (API). No hay otra fuente.
+- Odoo y FastAPI se migraron a Motor; luego se apagan. Solo Motor queda.
+
+## Proyecto
+- Repo: iShangoDev/iShangoMotor
+- Stack: Python 3.12+, FastAPI 0.115+, SQLModel 0.0.21+, PostgreSQL 16+, Alembic 1.13+, Pydantic v2, Uvicorn 0.30+
+- Auth: python-jose 3.3+, bcrypt 4.2+, python-dotenv 1.0+
+- Deploy: Digital Ocean VPS — SSH + Docker Compose (motor + postgres)
+
+## Estructura obligatoria de módulo
+Cada módulo vive en `app/modules/{modulo}/` con exactamente estos archivos:
+- `model.py` — entidad SQLModel (tabla DB)
+- `schema.py` — Pydantic Create / Update / Read (nunca el modelo directamente)
+- `repository.py` — CRUD, único punto de acceso a DB
+- `service.py` — reglas de negocio, nunca habla con DB ni HTTP directamente
+- `router.py` — endpoints FastAPI, nunca lógica de negocio
+
+## Flujo de capas — NUNCA saltarse
+```
+Router → Service → Repository → DB
+```
+- Router: HTTP, validación de entrada, devuelve schema Read
+- Service: reglas de negocio, llama al Repository
+- Repository: SQLModel + session, acceso a PostgreSQL
+- Un módulo NUNCA importa desde otro módulo — lógica compartida sube a `shared/`
+- **Excepción:** Un service puede orquestar repos de otro módulo para lecturas compuestas (ej: usuarios/service + RBACRepository para `?include=roles`). El JOIN vive en el módulo dueño del modelo.
+
+## Naming — Base de Datos
+- Tablas: snake_case plural → `personas`, `cuentas_bancarias`
+- Columnas: snake_case singular → `nombre_completo`, `fecha_nacimiento`
+- PK: `id` UUID → `id: uuid = Field(default_factory=uuid4)`
+- FK: `{tabla_singular}_id` → `persona_id`, `cuenta_id`
+- Timestamps: `created_at` y `updated_at` en TODAS las tablas sin excepción
+- Soft delete: `deleted_at` nullable — `NULL` = activo, fecha = eliminado
+- Índices: `ix_{tabla}_{columna}` → `ix_personas_documento`
+- GET listados: excluyen `deleted_at != null` por defecto. Si necesita ver eliminados: `?incluir_eliminados=true`
+
+## Naming — Código Python
+- Modelos SQLModel: PascalCase singular → `Persona`, `CuentaBancaria`
+- Schemas Pydantic: `{Modelo}{Acción}` → `PersonaCreate`, `PersonaRead`, `PersonaUpdate`
+- Repositorios: `{Modulo}Repository` → `PersonaRepository`
+- Servicios: `{Modulo}Service` → `PersonaService`
+- Funciones: snake_case con verbo → `get_persona`, `create_cuenta`, `delete_usuario`
+- URLs: kebab-case → `/v1/personas/{id}/documentos`
+
+## Reglas de endpoints
+- Prefijo obligatorio: `/v1/{modulo}/`
+- Verbos semánticos: GET listar/obtener, POST crear, PATCH actualizar parcial, DELETE soft-delete
+- Respuestas: SIEMPRE tipadas con schema Read — nunca devolver modelo SQLModel directamente
+- Errores HTTP: formato `{ "code", "message", "details?" }` (V0.9). Ej: `{"code": "CONFLICT", "message": "El documento ya existe", "details": null}`
+- Paginación: todos los GET de listado aceptan `page` (default 1), `size` (default 25, max 100)
+- Respuesta paginada: `{"data": [...], "total": N, "page": N, "size": N}`
+- Acciones de negocio: `POST /v1/{modulo}/{id}/{accion}` — SIEMPRE devuelven el recurso actualizado completo
+
+## Variables de entorno (.env.example)
+```
+DATABASE_URL=postgresql://user:password@postgres:5432/dbname
+SECRET_KEY=your-secret-key-here
+ENVIRONMENT=local
+ALLOWED_ORIGINS=http://localhost:3000
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+REFRESH_TOKEN_EXPIRE_DAYS=30
+```
+- Nunca hardcodear valores — siempre desde `core/config.py` con `python-dotenv`
+- `ENVIRONMENT`: local | staging | production
+
+## Migraciones
+- Alembic gestiona TODAS las migraciones — nunca `create_all()` en producción
+- Cada cambio de schema = nueva migración versionada en `migrations/versions/`
+- Nombre de migración: `{timestamp}_{descripcion_snake_case}.py`
+- **Seed/data migrations:** Si usas `Session` con `commit=False` (para compartir transacción con Alembic), SIEMPRE llamar `session.flush()` tras `session.add()` — sin flush el INSERT no se ejecuta y los datos no se persisten.
+
+## Versionado
+- Swagger `/docs` es el vivo del contrato — se actualiza automáticamente con FastAPI
+- `CHANGELOG.md` en raíz — formato Keep a Changelog, SemVer
+- Breaking change → entrada `### Breaking` en CHANGELOG + notificar al repo ERP
+- Deploy atómico con ERP — Motor y ERP suben en el mismo ciclo de release
+
+## Docker Compose
+- Dos servicios: `motor` (FastAPI) + `postgres` (PostgreSQL 16)
+- Volumen persistente para postgres
+- Un `docker-compose.yml` por ambiente: local y production
+- **Producción:** Puerto 8001 (8000 lo usa ishango-fastapi en el mismo servidor). NO tocar Odoo (8069) ni ishango-fastapi (8000).
+- Health check en `GET /health` — responde `{"status": "ok"}`

@@ -1,0 +1,356 @@
+---
+description: Orquestador del sistema iShango — activa módulos por contexto, conduce creación de nuevos módulos por las 9 dimensiones y conoce el workflow completo (ERP + Motor + deploy).
+globs: [
+  "src/components/**/*.tsx",
+  "src/components/**/*.ts",
+  "src/app/(private)/app/**/*.tsx",
+  "src/app/api/**/*.ts",
+  "app/modules/**/*.py",
+  ".cursor/rules/modules/**/*.mdc"
+]
+alwaysApply: false
+---
+
+# Orquestador iShango
+
+Rol único que une conocimiento de módulos y conocimiento de deploy. Se activa automáticamente cuando Cursor trabaja en archivos de módulo. Se invoca explícitamente para crear un módulo nuevo.
+
+---
+
+## Mapa de módulos — contexto activo
+
+Cuando Cursor detecta archivos de un módulo, activa el .mdc correspondiente:
+
+| Contexto (archivos) | .mdc activo |
+|---------------------|-------------|
+| `*/personas/**` | `.cursor/rules/modules/personas.mdc` |
+| `*/creditos/**` | `.cursor/rules/modules/creditos.mdc` |
+| `*/usuarios/**` | `.cursor/rules/modules/usuarios.mdc` |
+| `*/auth/**` | `.cursor/rules/modules/auth.mdc` |
+| `*/roles/**` | `.cursor/rules/modules/roles.mdc` |
+| `*/jobs/**` | `.cursor/rules/modules/jobs.mdc` |
+| `*/auditoria/**` | `.cursor/rules/modules/auditoria.mdc` |
+| `*/calendario/**` | `.cursor/rules/modules/calendario.mdc` |
+| `*/documentos/**` | `.cursor/rules/modules/documentos.mdc` |
+| `*/etiquetas/**` | `.cursor/rules/modules/etiquetas.mdc` |
+| `*/notificaciones/**` | `.cursor/rules/modules/notificaciones.mdc` |
+| `*/numeradores/**` | `.cursor/rules/modules/numeradores.mdc` |
+| `*/perfil/**` | `.cursor/rules/modules/perfil.mdc` |
+| `*/configuracion/**` | `.cursor/rules/modules/configuracion.mdc` |
+
+Cada .mdc cubre **ambas caras** (Motor + ERP) del módulo.
+
+---
+
+## Cuestionario — Crear módulo nuevo
+
+Árbol finito de decisión. Navegar dimensión por dimensión. Al final genera el .mdc del módulo.
+
+### Dimensión 1 — Datos
+
+> ¿Cuál es la estructura de datos del módulo?
+
+```
+A. Entidad simple → Tabla única
+B. Entidad con subentidades (ej. crédito + cuotas) → Principal + detalle
+C. Entidad con historial de estados → Principal + estados/historial
+D. Relación entre entidades existentes → Tabla junction
+```
+
+### Dimensión 2 — Comportamiento
+
+> ¿Qué hace el módulo con los datos? (puede ser más de uno)
+
+```
+□ Lee (consulta, dashboard, reporte) → Solo lee
+□ Crea registros propios → Crea
+□ Modifica registros existentes → Modifica
+□ Elimina (soft delete) → Elimina
+□ Recibe data de fuente externa → Recibe
+□ Envía data a sistema externo → Transfiere
+```
+
+Combinaciones típicas:
+- Solo lee → reporte/dashboard
+- Crea + Modifica + Elimina → CRUD puro
+- Recibe + Crea + Modifica → pipeline import
+- Crea + Transfiere → genera y envía
+
+### Dimensión 3 — API Motor
+
+> ¿Qué endpoints necesita en el Motor?
+
+```
+A. CRUD estándar (list, create, detail, update, delete)
+B. CRUD + acciones de negocio (+ aprobar, rechazar, liquidar, etc.)
+C. Solo lectura (GET list + GET detail)
+D. Import (POST con archivo/batch)
+E. Export (GET con formato csv/xlsx)
+```
+
+### Dimensión 4 — BFF
+
+> ¿Cómo es el proxy en Next.js?
+
+```
+A. Proxy puro — forwardea sin lógica (mayoría de módulos)
+B. Proxy + transformación — adapta shape para el frontend
+C. Proxy + agregación — combina múltiples endpoints Motor
+```
+
+### Dimensión 5 — Root URL
+
+> ¿Qué rutas necesita en el ERP?
+
+```
+A. /app/{modulo} — solo listado
+B. /app/{modulo} + /app/{modulo}/create — lista + crear
+C. /app/{modulo} + /app/{modulo}/[id] — lista + detalle
+D. /app/{modulo} + /app/{modulo}/[id] + /app/{modulo}/[id]/edit — lista + detalle + editar
+E. Completo — list + create + detail + edit (modales o páginas)
+```
+
+### Dimensión 6 — Frontend
+
+> ¿Qué modelo visual?
+
+```
+A. CRUD Lista Simple → components/dashboard/customer/ u order/
+B. CRUD con Stats → components/dashboard/invoice/
+C. Dashboard Métricas → components/dashboard/analytics/
+D. Master-Detail Drawer → components/dashboard/mail/
+E. Kanban → components/dashboard/tasks/
+F. Grid de Cards → components/dashboard/jobs/
+G. Detalle con Subentidades → customers/[id], orders/[id]
+H. Form Multi-Step → job-create-form
+I. Calendario → calendar/
+J. Settings → settings/
+```
+
+> ¿Qué patrón de listado?
+
+```
+A. Lista paginada — >100 registros (page/size/total)
+B. Lista simple — ≤50 registros (carga completa)
+C. Batch/agregado — datos agrupados por padre
+```
+
+### Dimensión 7 — Permisos
+
+> ¿Qué patrón de permisos?
+
+```
+A. Solo read — dashboard, reporte
+B. CRUD básico — read, create, edit, delete
+C. CRUD + acciones — + aprobar, rechazar, etc.
+D. Admin only — sin permisos granulares
+```
+
+Si elegiste C: ¿qué acciones de negocio? (ej. aprobar, rechazar, liquidar, activar, suspender)
+
+### Dimensión 8 — .mdc Cursor
+
+Generado automáticamente al completar las dimensiones 1–7. Ver template en la sección siguiente.
+
+### Dimensión 9 — Documentación
+
+> ¿Existe plan de implementación en docs/solicitud-implementacion/?
+
+```
+A. Sí → referenciar en el .mdc
+B. No → crear V{X.Y}-Plan-Implementacion.md antes de implementar
+```
+
+---
+
+## Template .mdc de módulo
+
+Al completar el cuestionario, generar con esta estructura:
+
+```markdown
+---
+description: Agente Módulo {Nombre} — aplica cuando Cursor edita archivos del módulo {modulo}
+globs: [
+  "src/components/{modulo}/**/*.tsx",
+  "src/components/{modulo}/**/*.ts",
+  "src/app/(private)/app/{modulo}/**/*.tsx",
+  "src/app/api/{modulo}/**/*.ts",
+  "app/modules/{modulo}/**/*.py"
+]
+---
+
+# Módulo {Nombre} — iShango Sistema
+
+## Comportamiento declarado (Dimensión 2)
+- [Lista de comportamientos: Crea | Modifica | Elimina | Lee | Recibe | Transfiere]
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** [Tabla única | Principal + detalle | etc.]
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+
+### Modelo SQLModel
+
+```python
+# Pegar clase SQLModel principal
+```
+
+### Schemas
+
+```python
+# {Entidad}Create, {Entidad}Update, {Entidad}Read
+```
+
+### Migración
+```
+migrations/versions/YYYYMMDD_add_{modulo}_table.py
+```
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** [CRUD estándar | CRUD + acciones | Solo lectura | etc.]
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+
+### ListParams soportados
+```
+GET /v1/{modulo}/?page=1&size=25&sort=...&filtro=...
+```
+
+---
+
+## Motor — Reglas de negocio
+
+1. [Regla 1]
+2. [Regla 2]
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** [Proxy puro | Proxy + transformación | etc.]
+
+- GET /api/{modulo}?page=1&size=25 → forwardea al Motor
+- POST /api/{modulo} → {Entidad}CreatePayload
+- GET/PATCH/DELETE /api/{modulo}/[id]
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** [List only | Completo | etc.]
+
+```
+/app/{modulo}         ← listado
+/app/{modulo}/create  ← (si aplica)
+/app/{modulo}/[id]    ← (si aplica)
+```
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** [CRUD Lista Simple | etc.]
+**Referencia:** components/dashboard/[customer|order|...]
+**Patrón listado:** [Lista paginada | Lista simple | Batch]
+
+### Estructura de archivos
+```
+src/
+├── app/
+│   ├── (private)/app/{modulo}/
+│   │   └── page.tsx
+│   └── api/{modulo}/
+│       ├── route.ts
+│       └── [id]/route.ts
+├── components/{modulo}/
+│   ├── {modulo}-view.tsx
+│   ├── {modulo}-table.tsx
+│   ├── {modulo}-form.tsx
+│   ├── {modulo}.types.ts
+│   └── use-{modulo}.ts
+```
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** [CRUD básico | CRUD + acciones | etc.]
+
+`puedeHacer('{modulo}', 'create')`, `puedeHacer('{modulo}', 'edit')`, `puedeHacer('{modulo}', 'delete')`
+
+Pasar `canCreate`, `canEdit`, `canDelete` a hijos.
+
+---
+
+## Decisiones técnicas
+
+- [Decisión 1 con justificación]
+
+---
+
+## Mejoras posibles
+
+- [Mejora 1]
+```
+
+---
+
+## Workflow — Deploy y push
+
+### ERP (Vercel)
+
+```powershell
+# Gate pre-push (obligatorio)
+npm run validate:ux
+
+# Push
+git add . ; git commit -m "feat({modulo}): descripción" ; git push origin develop
+```
+
+Ramas:
+- `develop` → libre, push directo, genera Preview en Vercel
+- `staging` → requiere PR
+- `main` → requiere PR + aprobación → Production
+
+Vercel build automático en cada push. Logs en Vercel Dashboard → Deployments.
+
+### Motor (Digital Ocean)
+
+```bash
+# Desde el servidor o CI
+git push origin main
+# SSH al servidor si deploy manual
+ssh deploy@159.89.89.130
+cd /app/ishango-motor && git pull && restart
+```
+
+### Variables de entorno críticas
+
+| Variable | Dónde | Descripción |
+|----------|-------|-------------|
+| `MOTOR_URL` | Vercel + .env.local | URL del Motor — server-side only |
+| `NEXT_PUBLIC_AUTH_STRATEGY` | Vercel | Debe ser `MOTOR` en producción |
+| `NEXTAUTH_SECRET` | Vercel | Secreto de sesión |
+
+---
+
+## Referencias
+
+| Regla | Contenido |
+|-------|-----------|
+| ishango-dimensiones.mdc | Las 9 dimensiones completas + criterios |
+| ishango-dimensiones-resumen.mdc | Resumen rápido de patrones |
+| ishango-diccionario.mdc | Glosario de términos |
+| ishango-proyectos-contexto.mdc | Contexto ERP/Motor |
+| erp-crear-modulo.mdc | Proceso obligatorio de modelado |
+| workflow.mdc | Workflow completo de deploy |

@@ -1,0 +1,92 @@
+---
+description: Capa Migraciones — Alembic
+globs: ["migrations/**/*.py"]
+alwaysApply: false
+---
+
+# Capa Migraciones — iShango Motor
+
+## Ubicación
+`migrations/**/*.py` — Alembic.
+
+## Estructura
+
+```
+migrations/
+├── env.py              ← configuración, importa modelos para metadata
+└── versions/
+    └── {timestamp}_{descripcion_snake_case}.py
+```
+
+## Naming
+
+- **Archivo**: `YYYYMMDD_NNN_{descripcion}.py` — ej. `20250227_add_personas_table.py`, `20250228_005_seed_rbac_inicial.py`
+- **revision**: string corto `"001"`, `"002"`, etc.
+- **down_revision**: referencia al anterior — cadena lineal
+
+## upgrade / downgrade
+
+- **upgrade**: SIEMPRE implementar — nunca dejar vacío
+- **downgrade**: SIEMPRE implementar — debe revertir exactamente el upgrade
+- Para seeds: downgrade ejecuta `DELETE` o equivalente para limpiar
+
+## Schema migrations (DDL)
+
+```python
+def upgrade() -> None:
+    op.create_table(
+        "personas",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("nombre", sa.String(), nullable=False),
+        # ...
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_personas_documento"), "personas", ["documento"], unique=True)
+
+def downgrade() -> None:
+    op.drop_index(op.f("ix_personas_documento"), table_name="personas")
+    op.drop_table("personas")
+```
+
+## Data migrations (seeds)
+
+Cuando se usa `Session` con la conexión de Alembic:
+
+```python
+def upgrade() -> None:
+    conn = op.get_bind()
+    session = Session(bind=conn)
+    try:
+        # Opción A: llamar servicio con commit=False
+        from app.modules.auth.service import create_usuario_inicial
+
+        create_usuario_inicial(
+            session,
+            email="admin@ishango.com",
+            password="admin123",
+            nombre="Administrador",
+            commit=False,  # ← comparte transacción con Alembic
+        )
+        # El servicio DEBE llamar session.flush() cuando commit=False
+
+        # Opción B: inserts manuales
+        session.add(empresa)
+        session.flush()  # ← OBLIGATORIO antes del siguiente INSERT que dependa de FK
+        session.add(modulo)
+        session.flush()
+    finally:
+        session.close()
+```
+
+## Regla crítica: session.flush()
+
+| Situación | Acción |
+|-----------|--------|
+| `session.add()` + siguiente INSERT usa FK del primero | **session.flush()** obligatorio |
+| Servicio con `commit=False` en migración | El servicio debe llamar `session.flush()` cuando `commit=False` |
+| Sin flush | El INSERT no se ejecuta en la transacción Alembic — datos no persisten |
+
+## env.py
+
+- Importar todos los modelos SQLModel para que `target_metadata` los detecte
+- `run_migrations_online()` usa `settings.database_url` de `app.core.config`

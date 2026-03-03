@@ -1,0 +1,153 @@
+---
+description: Agente Loading States ERP — aplica cuando Cursor edita layout, AuthProvider, get-session-server, loading.tsx, o vistas con estado de carga
+globs: ["src/app/layout.tsx", "src/app/(private)/app/loading.tsx", "src/lib/get-session-server.ts", "src/components/auth/motor-auth-context.tsx", "src/components/**/*-view.tsx", "src/components/**/*-detail*.tsx"]
+---
+
+# Loading States y Pre-hidratación — iShangoERP
+
+## Arquitectura de carga — dos capas
+
+### Capa 1 — Sesión (resuelta en servidor)
+`src/app/layout.tsx` (root) → `getSessionServer()` → pasa `initialSession` al MotorAuthProvider.
+`puedeHacer()` funciona desde el primer render — sin flickering de sidebar ni botones.
+
+### Capa 2 — Datos de cada vista (fetch cliente)
+`{modulo}-view.tsx` → `useEffect` → fetch → skeleton de filas → tabla real.
+
+---
+
+## Regla fundamental
+
+**La estructura de la página SIEMPRE se renderiza.** El skeleton solo reemplaza el contenido interior — nunca el layout completo.
+
+```tsx
+// ❌ NUNCA — cuadrado gris que reemplaza todo
+if (loading) {
+  return <Skeleton variant="rectangular" height={400} />;
+}
+return <ContenidoReal />;
+
+// ✅ SIEMPRE — estructura estable con skeleton interno
+return (
+  <Box sx={{ maxWidth: "var(--Content-maxWidth)", m: "var(--Content-margin)", p: "var(--Content-padding)", width: "var(--Content-width)" }}>
+    <Stack spacing={4}>
+      <Typography variant="h4">Título siempre visible</Typography>
+      <Card>
+        <CardContent>
+          {loading ? <SkeletonFilas /> : <TablaReal />}
+        </CardContent>
+      </Card>
+    </Stack>
+  </Box>
+);
+```
+
+## Archivo loading.tsx
+
+```
+src/app/(private)/app/loading.tsx   ← UN SOLO archivo — cubre todas las rutas privadas
+```
+
+Next.js lo muestra inmediatamente al navegar entre rutas, antes de que llegue el RSC de la nueva página. Elimina el flash de la página anterior.
+
+**No crear `loading.tsx` por módulo** — el global es suficiente.
+
+## Patrón de skeleton para listas (vistas con tabla)
+
+```tsx
+// Skeleton de filas dentro de Card — simula la tabla
+{loading ? (
+  <Stack spacing={1}>
+    {Array.from({ length: 5 }).map((_, i) => (
+      <Skeleton key={i} height={52} variant="rectangular" sx={{ borderRadius: 1 }} />
+    ))}
+  </Stack>
+) : datos.length === 0 ? (
+  <Typography color="text.secondary">No hay registros.</Typography>
+) : (
+  <TablaReal rows={datos} />
+)}
+```
+
+## Patrón de skeleton para detalle (vistas con un objeto)
+
+```tsx
+// Header con avatar/nombre — skeleton granular por campo
+<Stack direction="row" alignItems="center" spacing={2}>
+  {loading ? (
+    <Skeleton variant="circular" width={64} height={64} />
+  ) : (
+    <Avatar>{entidad?.nombre[0]}</Avatar>
+  )}
+  <Stack>
+    {loading ? (
+      <>
+        <Skeleton height={32} width={180} />
+        <Skeleton height={20} width={140} />
+      </>
+    ) : (
+      <>
+        <Typography variant="h5">{entidad?.nombre}</Typography>
+        <Typography color="text.secondary">{entidad?.email}</Typography>
+      </>
+    )}
+  </Stack>
+</Stack>
+```
+
+## Botón de acción durante loading
+
+```tsx
+// El botón de "Nuevo / Crear" se oculta durante el loading
+// Evita clicks antes de que carguen los datos
+{canCreate && !loading && (
+  <Button variant="contained" onClick={abrirModal}>
+    Nuevo registro
+  </Button>
+)}
+```
+
+## Estados que toda vista de lista debe manejar
+
+```tsx
+{loading ? (
+  <SkeletonFilas rows={5} />
+) : error ? (
+  <Typography color="error">{error}</Typography>
+) : datos.length === 0 ? (
+  <Typography color="text.secondary">No hay registros.</Typography>
+) : (
+  <TablaReal rows={datos} />
+)}
+```
+
+Los cuatro estados son obligatorios: loading, error, vacío, datos.
+
+## Vistas actualizadas en V0.7
+
+| Vista | Cambio |
+|-------|--------|
+| `usuarios-view.tsx` | Sin return anticipado — skeleton interno en Card |
+| `roles-view.tsx` | Ídem |
+| `personas-view.tsx` | Ídem |
+| `usuario-detail-view.tsx` | Skeleton granular por campo (avatar, nombre, email) |
+| `persona-details-page.tsx` | Sin Typography "Cargando…" — skeleton en contenido |
+
+## Por qué no migramos a Server Components
+
+Las vistas necesitan `useAuth()` para `puedeHacer()` — deben ser Client Components. El patrón de estructura estable + `loading.tsx` global es la solución correcta para Client Components con fetch en `useEffect`.
+
+## Smoke UX técnico mínimo
+
+Antes de push, ejecutar:
+
+```powershell
+npm run smoke:ux
+```
+
+El smoke debe cubrir:
+- rutas privadas críticas accesibles (`/app`, `/app/roles`, `/app/usuarios`, `/app/settings/account`)
+- redirección esperada a login cuando no hay sesión (`/app`)
+
+Para auditorías Lighthouse de rutas privadas, la expectativa es la inversa:
+- con sesión válida, `/app/*` NO debe redirigir a `/auth/login`

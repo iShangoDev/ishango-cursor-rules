@@ -1,0 +1,117 @@
+---
+description: Mapeo docs→reglas, estructura y proceso. Consultar al editar docs o reglas.
+globs: ["docs/**/*.md", ".cursor/rules/**/*.mdc"]
+alwaysApply: false
+---
+
+# Actualización de reglas .cursor
+
+## Principio
+
+**`.cursor/rules/` es la fuente de verdad.** Las reglas son la autoridad. `docs/` alimenta las reglas pero si hay conflicto prevalece .cursor. Este archivo define el mapeo docs→reglas.
+
+## Mapeo docs → reglas (completo)
+
+| docs | Regla(s) | Cuándo actualizar |
+|------|----------|-------------------|
+| arquitecturaConceptual/* | root, workflow, actualizacion-reglas, modules/*, layers/* — ver tabla abajo | Cambios en convenciones, modelos, patrones |
+| resultado-implementacion/V{X.Y}-Result-Motor.md | modules/{modulo}.mdc | Sección "Reglas .cursor actualizadas" |
+| resultado-implementacion/V{X.Y}-Result-Motor.md | workflow.mdc | Si hay cambios en deploy/tests |
+| resultado-implementacion/V{X.Y}-Result-Motor.md | root.mdc | Si hay convenciones globales (ej. formato errores V0.9) |
+| solicitud-implementacion/V{X.Y}.md | modules/{modulo}.mdc | Checklist indica qué módulo |
+| mejoras/lista-consolidada-v1.md, plan-ejecucion.md | ask-mode-expert.mdc | Cambios en centro de conocimiento |
+| docs/deploy/workflow-do.md, docs/deploy/README.md | workflow.mdc | Cambios en deploy; workflow REFERENCIA, no duplica |
+| Nuevo app/modules/{x}/ | modules/{x}.mdc | Crear regla al crear módulo |
+| solicitud-desde-erp/* | solicitud-desde-erp.mdc | Request del ERP al Motor |
+| solicitud-implementacion-erp/* | solicitud-implementacion-erp.mdc | Motor crea plan + copia en ERP (un solo flujo) |
+| ISHANGODEV-V0.1.md, MODELO-COMUNICACION.md | archive/ishangodev-v01.mdc (archivado) | Modelo automatización — migrado a ishango-proyectos-contexto |
+
+## Mapeo arquitecturaConceptual → reglas
+
+| Doc | Regla(s) |
+|-----|----------|
+| convenciones-ishango.md | root.mdc, workflow.mdc |
+| modelos-y-patrones-ishango.md | root.mdc |
+| modelo-acceso-ishango.md | modules/auth.mdc |
+| modelo-contrato-ishango.md | root.mdc (formato errores, paginación) |
+| modelo-agentes-ishango.md | actualizacion-reglas.mdc, layers/* |
+| modelo-topologias-ishango.md | Referencia (diagramas) |
+| modelo-rendimiento-ishango.md | root.mdc |
+| modelo-ux-ishango.md | — |
+| modelos-conceptuales-ishangodev.md | ishangodev-v01.mdc, solicitud-* |
+
+## Docs operativos (referenciados, no duplicados)
+
+| docs | Uso |
+|------|-----|
+| docs/deploy/README.md | Primera vez deploy; workflow.mdc referencia |
+| docs/deploy/workflow-do.md | Flujo completo Motor+FastAPI+Odoo |
+| docs/deploy/log-2025-02-27.md | Troubleshooting (Session, bcrypt, .env) |
+| docs/deploy/infra-fastapi-odo.md | Alternativa de infra |
+
+## Mapeo layers (capas arquitectónicas)
+
+| Capa | Regla | Globs |
+|------|-------|-------|
+| migrations | layers/migrations.mdc | `migrations/**/*.py` |
+| shared | layers/shared.mdc | `app/shared/**/*.py` |
+| core | layers/core.mdc | `app/core/**/*.py` |
+| módulos | modules/{modulo}.mdc | Por módulo |
+
+## Arquitectura (4 capas)
+
+- **Capa 0** (alwaysApply): root, workflow — mínimo global
+- **Capa 1** (modo): ask-mode-expert, actualizacion-reglas
+- **Capa 1** (sistema): ishango-dimensiones, ishango-diccionario, ishango-orquestador — mente única
+- **Capa 2** (proceso): solicitud-implementacion-erp (Motor→ERP), solicitud-desde-erp (ERP→Motor)
+- **Capa 3** (módulo): modules/*.mdc — experto en módulo (Motor + ERP)
+- **Layers** (por glob): layers/migrations, layers/shared, layers/core
+
+## Proceso de actualización
+
+1. Implementar según solicitud-implementacion
+2. Completar checklist → incluir "modules/X.mdc actualizado" (o root/workflow si aplica)
+3. En resultado-implementacion → sección "Reglas .cursor actualizadas"
+4. Actualizar .mdc: endpoints, schemas, excepciones; **referenciar** docs, no copiar código
+5. Si nueva convención global → root.mdc; si deploy/tests → workflow.mdc
+
+## Cierre de pendientes (obligatorio)
+
+Al cerrar una versión, clasificar cada pendiente abierto en una de estas categorías:
+
+- **Pendiente interno (Motor):** requiere cambio en este repo (`iShangoMotor`).
+- **Pendiente externo (ERP):** depende de ejecución en `iShangoERP`.
+
+Reglas de trazabilidad:
+
+1. En `docs/solicitud-implementacion/*.md`, marcar como completado lo ya entregado en Motor.
+2. Si un ítem depende del ERP, mantenerlo abierto y etiquetarlo explícitamente como externo.
+3. En `docs/resultado-implementacion/*.md`, incluir sección `Estado ERP (externo)` cuando aplique.
+4. Evitar checklists ambiguos: no dejar ítems abiertos sin dueño (`Motor` o `ERP`).
+
+## Archivos del sistema compartido (ishango-*)
+
+Los siguientes archivos son **idénticos en ERP y Motor**. Son la "mente única del sistema":
+
+| Archivo | Contenido |
+|---------|-----------|
+| `ishango-dimensiones.mdc` | Las 9 dimensiones + catálogo de patrones + criterios de decisión |
+| `ishango-dimensiones-resumen.mdc` | Resumen ejecutivo de patrones |
+| `ishango-proyectos-contexto.mdc` | Contexto ERP/Motor, relación cross-repo |
+| `ishango-diccionario.mdc` | Glosario canónico de términos del sistema |
+| `ishango-orquestador.mdc` | Orquestador: activa módulos + cuestionario + workflow |
+
+Al editar cualquiera de estos archivos, replicar el cambio en el otro repo.
+
+## Archivos archivados (.cursor/rules/archive/)
+
+| Archivo | Motivo |
+|---------|--------|
+| ishangodev-v01.mdc | Referencia versionada — contenido migrado a ishango-proyectos-contexto.mdc |
+
+## Principios Cursor
+
+- Referenciar archivos (`@archivo.py` o ruta), no copiar código
+- Reglas < 500 líneas
+- Una regla = un propósito
+- Globs para cargar solo cuando aplique

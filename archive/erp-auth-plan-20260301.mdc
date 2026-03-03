@@ -1,0 +1,21 @@
+---
+description: Plan Auth Performance 20260301 — branch feature/loading-experiment
+globs: ["src/lib/get-session-server.ts", "src/app/api/auth/**/*", "src/lib/session.ts", "src/lib/motor-fetch.ts"]
+---
+
+# Plan Auth Performance — implementación
+
+**Branch:** feature/loading-experiment  
+**Plan:** docs/investigacion/20260301-plan-auth-performance-deuda-tecnica.md
+
+## Fases implementadas
+
+1. **Fase 1:** revalidate 300 en get-session-server.ts — cache 5 min por usuario
+2. **Fase 2.1:** ensureModelosModule eliminado — modulos del Motor sin transformación
+3. **Fase 2.2:** user_id eliminado de cookie — getSessionUserId decodifica JWT
+4. **Fase 2.3:** Requisito refresh_token documentado en docs/solicitud-a-motor/V0.28-Request-Motor.md
+
+## No implementado en este ciclo
+
+- Fase 3: Cookie dual (opcional, post revalidate)
+- Fase 4: R1-R6 (otras mejoras)

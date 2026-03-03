@@ -1,0 +1,25 @@
+---
+description: Módulo Documentos ERP — gestión de adjuntos polimórficos
+globs: ["src/components/documentos/**/*.tsx", "src/components/documentos/**/*.ts", "src/app/(private)/app/documentos/**/*.tsx", "src/app/api/documentos/**/*.ts"]
+---
+
+# Módulo Documentos — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: File Storage
+- Referencia principal: `src/components/dashboard/file-storage/storage-view.tsx`
+- Referencia secundaria: `src/components/dashboard/file-storage/item-row.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Tabla/listado de archivos con metadata + acciones (preview/download/delete).
+
+## Flujo obligatorio
+`Motor -> /api/documentos -> page.tsx -> documentos-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla, schema, endpoints `/v1/documentos/`.

@@ -1,0 +1,81 @@
+---
+description: Patrones de listado — Lista paginada, Lista simple, Batch. Criterios por volumen de datos.
+globs: ["src/components/**/*-view.tsx", "src/components/**/*-table.tsx", "src/app/(private)/app/**/page.tsx"]
+alwaysApply: false
+---
+
+# Patrones de Listado — iShango ERP
+
+## Objetivo
+
+Cada módulo con listado debe seguir explícitamente uno de tres patrones. La elección se basa en **volumen de datos** y **estructura de la respuesta**.
+
+---
+
+## Matriz de decisión
+
+| Patrón | Umbral | Cuándo elegir |
+|--------|--------|---------------|
+| **Lista paginada** | >100 registros típicos, o >50 con crecimiento esperado | Personas, usuarios, futuros módulos de alto volumen |
+| **Lista simple** | <=50 registros estables | Numeradores, etiquetas, configuracion, auditoria (hoy) |
+| **Batch/agregado** | N/A (por estructura, no por volumen) | Datos agrupados por entidad padre (roles por módulo) |
+
+**Regla de decisión:** Si dudás entre Lista paginada y Lista simple, elegir Lista paginada si el Motor ya soporta `page`/`size`/`total` o si el volumen puede superar 100 registros en 12 meses.
+
+---
+
+## Patrones — descripción
+
+### 1. Lista paginada
+
+**Implementación:** `usePaginatedList` + BFF con `page`/`size`/`total`, `TablePagination` MUI.
+
+**Referencia:** `personas-view`, `usuarios-view`
+
+**Flujo:** Motor → BFF (forwardea ?page=&size=) → page.tsx (getXxxListServer) → {modulo}-view (usePaginatedList, initialData) → {modulo}-table
+
+**Requisitos Motor:** Endpoint que acepte `?page=&size=` y devuelva `{ data, total }`.
+
+---
+
+### 2. Lista simple
+
+**Implementación:** `SimpleListView` (o `{modulo}-table` que use `getCoreRowsServer`). Carga completa sin paginación.
+
+**Referencia:** `numeradores-table`, `auditoria-table`, `documentos-table`, `etiquetas-table`, etc.
+
+**Flujo:** Motor → getCoreRowsServer(path) → page.tsx → {modulo}-view → SimpleListView con endpoint
+
+**Requisitos Motor:** Endpoint que devuelva array o `{ data: [] }`. Sin page/size.
+
+---
+
+### 3. Batch/agregado
+
+**Implementación:** Query que devuelve datos agrupados por entidad padre. No es lista plana paginada.
+
+**Referencia:** `roles-view` (modulos-con-roles: módulos con sus roles anidados)
+
+**Flujo:** Motor → BFF (endpoint batch) → page.tsx → {modulo}-view (useQuery con queryKey por empresa)
+
+**Requisitos Motor:** Endpoint batch/agregado (ej. `/v1/empresas/{id}/modulos-con-roles`).
+
+---
+
+## Mapeo módulos actuales
+
+| Patrón | Módulos |
+|--------|---------|
+| Lista paginada | personas, usuarios, creditos |
+| Lista simple | numeradores, auditoria, documentos, etiquetas, notificaciones, jobs, configuracion, calendario |
+| Batch | roles |
+
+---
+
+## Documentar en módulo
+
+En `.cursor/rules/modules/{modulo}.mdc`, en la sección "Modelo extendido", incluir:
+
+```markdown
+- **Patrón listado:** [Lista paginada | Lista simple | Batch]
+```

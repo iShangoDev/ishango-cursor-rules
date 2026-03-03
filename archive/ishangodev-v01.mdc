@@ -1,0 +1,16 @@
+---
+description: Modelo iShangoDev V0.1 — automatización, arquitectura, deploy
+globs: ["docs/**/*.md", ".github/**/*"]
+alwaysApply: false
+---
+
+# iShangoDev V0.1
+
+Referencia: `docs/referencia/ishangodev-v01.md`, `docs/referencia/modelo-comunicacion.md`
+
+## Resumen
+
+- **Principios:** Un repo = un deploy, Motor como contrato, docs como enlace, reglas versionadas
+- **Flujo bidireccional:** Motor → ERP (`solicitud-implementacion-erp`), ERP → Motor (`solicitud-a-motor` → `solicitud-desde-erp`)
+- **Deploy:** ERP en Vercel (push), Motor en DO (GitHub Actions en push a main)
+- **Reglas por capas:** 0 (global), 1 (cross-repo), 2 (proceso), 3 (módulos)

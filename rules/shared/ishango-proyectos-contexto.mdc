@@ -1,0 +1,85 @@
+---
+description: Contexto de proyectos ERP y Motor — relación, rutas, solicitudes cross-repo. Credinter excluido.
+globs: ["docs/**/*.md", "src/**/*", "app/**/*", ".cursor/rules/**/*.mdc"]
+alwaysApply: false
+---
+
+# Proyectos iShango — ERP y Motor
+
+Contexto a nivel proyecto. **Credinter excluido** por ahora.
+
+---
+
+## ERP
+
+| Campo | Valor |
+|-------|-------|
+| Repo | iShangoDev/iShangoERP |
+| Stack | Next.js 15 App Router, MUI v6, TypeScript, Zod |
+| Deploy | Vercel — https://i-shango-erp.vercel.app/ |
+| Ruta local | `c:\dev\iShangoERP` |
+
+**Rol:** Frontend + BFF. Consume el Motor vía API. No tiene base de datos propia para datos de negocio.
+
+---
+
+## Motor
+
+| Campo | Valor |
+|-------|-------|
+| Repo | iShangoDev/iShangoMotor |
+| Stack | FastAPI, SQLModel, PostgreSQL, Python |
+| Infra | Digital Ocean (159.89.89.130:8001) |
+| Ruta local | `C:\dev\ishango-motor` |
+| Fuente única | Créditos, personas, cuotas, pagos |
+
+**Rol:** API backend. Fuente de verdad de datos de negocio. ERP consulta solo al Motor.
+
+---
+
+## Relación ERP ↔ Motor
+
+```
+Motor (API) → BFF /api/* → page.tsx (Server) → {modulo}-view (Client) → componentes
+```
+
+- **MOTOR_URL** en .env: server-side only — el browser nunca la recibe
+- **BFF:** proxy en `app/api/{modulo}/` — usa `motorFetch`, `getMotorUrl()`
+- **Tipos:** `{modulo}.types.ts` es espejo del schema Pydantic del Motor
+- **CORS:** el BFF es quien llama al Motor, nunca el browser directamente
+
+---
+
+## Solicitudes cross-repo
+
+| Dirección | Plan en |
+|-----------|---------|
+| ERP solicita al Motor | `docs/solicitud-implementacion-erp/` (Motor) + `docs/solicitud-implementacion/` (ERP) |
+| Motor solicita al ERP | `docs/solicitud-implementacion/` (ERP) con encabezado "Request del Motor" |
+
+### Checklist cuando Motor impacta ERP
+
+1. [ ] Crear en Motor: `docs/solicitud-implementacion-erp/V{X.Y}-Plan-Implementacion-ERP.md`
+2. [ ] Crear en ERP: `docs/solicitud-implementacion/V{X.Y}-Plan-Implementacion.md` con primera línea: `> **Request del Motor:** Este plan es una solicitud del repo iShangoMotor (V{X.Y})...`
+3. [ ] Actualizar `docs/solicitud-implementacion-erp/README.md` en Motor
+4. [ ] Actualizar `docs/solicitud-implementacion/README.md` en ERP
+5. [ ] Si hay cambios en tipos/respuestas: actualizar `{modulo}.types.ts` en ERP
+
+---
+
+## Referencias Motor (ruta local)
+
+| Recurso | Ruta |
+|---------|------|
+| Lista consolidada | C:\dev\ishango-motor\docs\mejoras\lista-consolidada-v1.md |
+| Investigación | C:\dev\ishango-motor\docs\investigacion\ |
+| Solicitudes ERP | C:\dev\ishango-motor\docs\solicitud-implementacion-erp\ |
+| Auth, RBAC | C:\dev\ishango-motor\app\modules\auth\, app\modules\rbac\ |
+
+---
+
+## El .cursor como mente única
+
+El `.cursor` es **idéntico** en ambos repos. No es "reglas del ERP" ni "reglas del Motor" — es el conocimiento del sistema iShango completo. Esto permite que desde cualquier proyecto, Cursor conozca ambas caras del sistema y pueda facilitar cambios en ERP y Motor con las mismas reglas y el mismo vocabulario.
+
+Ver `ishango-dimensiones.mdc` para la arquitectura completa de dimensiones de módulo.

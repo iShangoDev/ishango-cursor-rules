@@ -1,0 +1,38 @@
+---
+description: Endpoints sync Credinter — aplica al editar router_sync y auth API Key
+globs: ["app/modules/creditos/router_sync.py", "app/core/config.py"]
+---
+
+# Credinter Sync — iShangoMotor
+
+## Fuente de datos
+- Motor es la unica fuente de creditos. Credinter llama a Motor para identificar pagos.
+- La DB de Credinter (aquarius) NO se toca. Credinter solo persiste payment_request_mp, etc.
+
+## Plan maestro
+Ver `docs/solicitud-desde-erp/V0.30-Credinter-Migracion.md`.
+
+## Implementación identificación
+Ver `docs/credinter/IDENTIFICACION-PAGOS.md` — contrato, lógica sufijo numérico, referencia a Credinter.
+
+## Endpoints
+- `POST /v1/credinter/solicitudes` — sync solicitud desde Credinter (crea solicitud crédito en estado pending, sin cuotas). Idempotente por credinter_request_id. Credinter envía solo a este endpoint.
+- `POST /v1/credinter/solicitud` — legacy, payload plano CreditoCreate.
+- `POST /v1/credinter/pago` — sync pago (imputa). Idempotente por credinter_payment_id.
+- `POST /v1/credinter/pagos/identificar` — identificación de pagos por description (SRS v1.1).
+
+## Auth
+- Header `X-API-Key` con valor de `CREDINTER_API_KEY`.
+- Si no configurado: 503.
+- Si inválido: 401.
+
+## Variables
+- `CREDINTER_API_KEY` en `.env.local` (server-side only).
+
+---
+
+## ERP — No implementado
+
+> Este módulo no tiene componente en iShangoERP.
+> Credinter llama directamente al Motor via API Key — el ERP no intermedia en este flujo.
+> Si se agrega vista de monitoreo en ERP, documentar aquí: BFF, root URL, componentes.

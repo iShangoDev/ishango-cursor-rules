@@ -1,0 +1,59 @@
+---
+description: Spec SimpleTableView — componente declarativo CRUD (port de Credinter)
+globs: ["src/components/core/simple-table-view.tsx", "src/components/core/simple-table-form.tsx"]
+alwaysApply: false
+---
+
+# SimpleTableView — iShango ERP
+
+## Origen
+Port de Credinter: simple-table.js + simple-form.js + filtered-table.js. Adaptado a TypeScript, React Query, Devias Kit.
+
+## Props principales
+
+```typescript
+interface SimpleTableViewProps<T> {
+  title: string;
+  subtitle?: string;
+  formConfig: FormConfig;
+  columns: SimpleTableColumn<T>[];
+  endpoint: string;           // BFF base, ej. /api/provincias
+  queryKey: readonly unknown[];
+  normalizeRows?: (data: unknown) => T[];
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
+}
+```
+
+## FormConfig
+
+```typescript
+interface FormConfig {
+  name: string;              // Nombre de la entidad (para mensajes)
+  fields: FormField[];
+}
+
+interface FormField {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'number' | 'date' | 'dropdown' | 'checkbox';
+  options?: string | Array<{ id: string; name: string }>;  // URL fetch o array estático
+  child?: FormField;        // Dropdown encadenado: options se fetchean con ?parentKey=value
+  required?: boolean;
+  size?: number;            // Grid cols 1-12
+}
+```
+
+## Dropdowns encadenados
+Cuando un FormField tiene `child`, al cambiar el valor del padre se fetchea `child.options?parentKey=value`. El hijo se deshabilita hasta que el padre tenga valor.
+
+## Flujo
+- Fetch: useQuery con queryKey
+- Create: POST endpoint, body JSON
+- Update: PATCH endpoint/[id]
+- Delete: DELETE endpoint/[id] con Dialog de confirmación
+- Toast: sonner para éxito/error
+
+## Referencia
+Credinter: `src/components/core/table/simple-table.js`, `simple-form.js`

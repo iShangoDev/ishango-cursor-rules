@@ -1,0 +1,11 @@
+---
+description: Alias ERP — reglas completas en erp-root.mdc
+globs: ["**/*.tsx", "**/*.ts"]
+alwaysApply: true
+---
+
+# iShango ERP — Reglas Globales
+
+Ver [erp-root.mdc](erp-root.mdc) para reglas completas del proyecto.
+
+Resumen: Next.js 15 App Router, Motor externo, AuthStrategy.MOTOR por defecto, deploy Vercel.

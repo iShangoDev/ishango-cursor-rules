@@ -1,0 +1,70 @@
+---
+description: Capa core — config, database, security, deps
+globs: ["app/core/**/*.py"]
+alwaysApply: false
+---
+
+# Capa core — iShango Motor
+
+## Ubicación
+`app/core/**/*.py` — configuración e infraestructura base.
+
+## Archivos
+
+| Archivo | Rol |
+|---------|-----|
+| `config.py` | Settings (Pydantic BaseSettings) — env vars |
+| `database.py` | Engine, session, `get_session` |
+| `security.py` | JWT, bcrypt — create/verify tokens, hash passwords |
+| `deps.py` | FastAPI Depends — `SessionDep`, `get_current_user` |
+
+## config.py
+
+```python
+class Settings(BaseSettings):
+    database_url: str
+    secret_key: str
+    environment: str = "local"
+    allowed_origins: str = "http://localhost:3000"
+    access_token_expire_minutes: int = 480
+    refresh_token_expire_days: int = 30
+
+    class Config:
+        env_file = ".env.local"
+        extra = "ignore"
+
+settings = Settings()
+```
+
+- Nunca hardcodear valores — siempre desde `settings`
+- `extra = "ignore"` — evita errores por vars no declaradas
+
+## database.py
+
+- Engine SQLModel/SQLAlchemy
+- `get_session` — dependency para inyectar `Session` en routers
+- Session se cierra automáticamente tras el request
+
+## security.py
+
+- `verify_password`, `get_password_hash` — bcrypt
+- `create_access_token`, `create_refresh_token`, `decode_token` — JWT
+- Usa `settings.secret_key`, `settings.access_token_expire_minutes`, etc.
+
+## deps.py
+
+```python
+SessionDep = Annotated[Session, Depends(get_session)]
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict
+```
+
+- `SessionDep` — inyectar en routers que necesitan DB
+- `get_current_user` — validar JWT, devolver payload (sub, empresa_id, etc.)
+
+## Reglas
+
+- **core** no importa de módulos ni de shared
+- Los módulos importan de core (config, deps, database)
+- Cambios en core afectan toda la app — revisar con cuidado

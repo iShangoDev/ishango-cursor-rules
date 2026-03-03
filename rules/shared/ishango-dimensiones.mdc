@@ -1,0 +1,290 @@
+---
+description: Las 9 dimensiones de un módulo iShango — catálogo de patrones y criterios de decisión. Nivel proyecto (ERP + Motor). Sin contenido por módulo.
+globs: ["src/**/*", "app/**/*", ".cursor/rules/modules/**/*"]
+alwaysApply: false
+---
+
+# Las 9 Dimensiones de un Módulo iShango
+
+Documento fundacional. Define qué es un módulo en todas sus capas. Base para el cuestionario (árbol finito), el orquestador y el template .mdc de cada módulo.
+
+Ver `ishango-dimensiones-resumen.mdc` para la versión rápida. Detalles por módulo en `.cursor/rules/modules/{modulo}.mdc`.
+
+```
+Módulo = Tablas + Comportamiento declarado + API Motor + BFF + Root URL
+       + Componentes + Permisos + .mdc Cursor + Documentación
+```
+
+Cada módulo tiene sus tablas propias, su set de API propio, su root único y su .mdc que conoce todo esto. Aunque "sobrecargue", cada módulo carga su propio peso. No hay atajos de compartir tablas o endpoints: eso crea deuda arquitectónica invisible.
+
+---
+
+## 1. Dimensión Datos
+
+**¿Qué data maneja?**
+
+Las tablas propias de cada módulo viven en **iShangoMotor** (PostgreSQL). El ERP no tiene base de datos propia para datos de negocio.
+
+| Aspecto | Definición |
+|---------|------------|
+| Tablas propias | Cada módulo tiene su(s) tabla(s) en Motor. Ej: personas, creditos, cobranzas |
+| Relaciones | FK hacia otras tablas (ej. crédito → persona). Nunca queries cross-módulo directos |
+| Migraciones | Archivos de migración propios del módulo. Nadie toca las migraciones de otro |
+| Seed | Data inicial propia si corresponde |
+
+### Patrones disponibles
+
+| Patrón | Descripción | Criterio de decisión |
+|--------|-------------|----------------------|
+| **Tabla única** | Entidad simple, una tabla principal | Sin subentidades o relaciones complejas |
+| **Principal + detalle** | Tabla principal + tabla(s) hija (ej. crédito + cuotas) | Entidad con 1:N explícito |
+| **Principal + estados/historial** | Tabla principal + tabla de transiciones o auditoría | Flujos con estados, trazabilidad |
+| **Tabla junction** | Relación many-to-many con tabla intermedia | Etiquetas, roles por entidad |
+
+---
+
+## 2. Dimensión Comportamiento sobre los Datos
+
+**¿Qué hace con la data?**
+
+Cada módulo debe **declarar explícitamente** cuáles comportamientos realiza:
+
+| Comportamiento | Descripción | Ejemplo |
+|----------------|-------------|---------|
+| **Recibe** | Lee data de otra fuente (import, webhook, otro sistema) | Normalización de archivos TSV/CSV |
+| **Transfiere** | Envía data a otro módulo o sistema externo | Exportar deuda a sistema de cobranza |
+| **Crea** | Genera registros nuevos | Alta de persona, apertura de crédito |
+| **Modifica** | Actualiza registros existentes | Cambio de estado, actualización de datos |
+| **Elimina** | Soft delete de registros | Baja lógica |
+| **Lee** | Solo consulta, no altera | Dashboard, reportes |
+
+### Combinaciones posibles (patrones)
+
+| Combinación | Descripción | Criterio |
+|-------------|-------------|---------|
+| **Solo lee** | Dashboard, reporte. Sin create/edit/delete | Sin escritura |
+| **CRUD puro** | Crea + modifica + elimina | Entidad estándar |
+| **Recibe + normaliza** | Import (archivo, batch) | Carga masiva externa |
+| **Transfiere** | Export, webhook | Envío a externo |
+| **Crea + transfiere** | Genera y envía (ej. factura → envío) | Integración downstream |
+| **Pipeline completo** | Recibe + crea + modifica | Import complejo |
+
+---
+
+## 3. Dimensión API Motor
+
+**Su contrato con el mundo.**
+
+Cada módulo tiene su **set de endpoints propio**. Nadie comparte endpoints. Si dos módulos necesitan la misma data, cada uno tiene su endpoint propio (aunque internamente el repositorio comparta una query).
+
+```
+/v1/{modulo}/              GET  → list (paginado, filtros)
+/v1/{modulo}/              POST → create
+/v1/{modulo}/{id}          GET  → detail
+/v1/{modulo}/{id}          PATCH → update
+/v1/{modulo}/{id}          DELETE → soft delete
+/v1/{modulo}/{id}/{accion} POST → acción de negocio
+```
+
+### Patrones disponibles
+
+| Patrón | Endpoints | Cuándo usar |
+|--------|-----------|-------------|
+| **CRUD estándar** | list, create, detail, update, delete | Entidad principal |
+| **CRUD + acciones de negocio** | CRUD + aprobar, rechazar, liquidar | Flujos con estados |
+| **Solo lectura** | GET list + GET detail | Dashboards, reportes |
+| **Import** | POST con archivo/batch | Carga masiva |
+| **Export** | GET con formato (csv, xlsx) | Descarga de datos |
+
+---
+
+## 4. Dimensión BFF Next.js
+
+**Su capa intermedia.**
+
+```
+/api/{modulo}/               ← proxy hacia Motor
+/api/{modulo}/[id]/          ← proxy hacia Motor
+/api/{modulo}/[id]/{accion}/ ← acciones de negocio
+```
+
+El BFF no tiene lógica de negocio. Revalida sesión, traduce errores y forwardea. Resuelve CORS y agrega la capa de seguridad. Usa `motorFetch` y `getMotorUrl()`.
+
+### Patrones disponibles
+
+| Patrón | Descripción | Cuándo usar |
+|--------|-------------|-------------|
+| **Proxy puro** | Forwardea request/response sin lógica | Mayoría de módulos |
+| **Proxy + transformación** | Adapta shape para el frontend | Respuesta Motor ≠ contrato UI |
+| **Proxy + agregación** | Combina múltiples endpoints Motor en uno | Reducir round-trips |
+
+---
+
+## 5. Dimensión Root URL
+
+**Su espacio en la URL.**
+
+Un módulo = un **root único**. Nunca comparte prefijo con otro módulo.
+
+```
+/app/{modulo}              ← list
+/app/{modulo}/create       ← creación
+/app/{modulo}/{id}         ← detalle
+/app/{modulo}/{id}/edit    ← edición (alternativa al modal)
+```
+
+### Patrones disponibles
+
+| Patrón | Rutas | Cuándo usar |
+|--------|-------|-------------|
+| **List only** | /app/{modulo} | Solo listado |
+| **List + create** | /app/{modulo}, /app/{modulo}/create | Lista + página crear |
+| **List + detail** | /app/{modulo}, /app/{modulo}/[id] | Lista + detalle lectura |
+| **List + detail + edit** | + /app/{modulo}/[id]/edit | Detalle + edición en página |
+| **Completo** | list + create + detail + edit (modal o página) | CRUD completo |
+
+---
+
+## 6. Dimensión Frontend (Componentes)
+
+**Su estructura visual.**
+
+```
+components/{modulo}/
+├── {modulo}-view.tsx      ← orquestador, permisos, estado
+├── {modulo}-table.tsx     ← tabla MUI
+├── {modulo}-form.tsx      ← React Hook Form + Zod
+├── {modulo}-filters.tsx   ← filtros
+├── {modulo}-crear-modal   ← modal crear
+├── {modulo}-editar-modal  ← modal editar
+├── {modulo}.types.ts      ← espejo exacto del schema Motor
+└── use-{modulo}.ts        ← mutations hacia BFF
+```
+
+### Modelos Devias disponibles
+
+Ver **erp-devia-models.mdc** para el catálogo completo.
+
+| Modelo | Referencia | Cuándo usar |
+|--------|------------|-------------|
+| CRUD Lista Simple | customer/, order/ | Lista tabla + filtros + modales |
+| CRUD con Stats | invoice/ | Métricas + vista agrupada |
+| Dashboard Métricas | analytics/, logistics/ | KPIs, reportes |
+| Master-Detail Drawer | mail/ | Lista + detalle en mismo layout |
+| Kanban | tasks/ | Pipeline por estados |
+| Grid de Cards | jobs/, blog/, file-storage/ | Catálogo, galería |
+| Detalle con Subentidades | customers/[id], orders/[id] | Detalle con tabs/secciones |
+| Form Multi-Step | job-create-form | Creación compleja en pasos |
+| Calendario | calendar/ | Eventos, citas |
+| Documento | invoice-pdf | Factura, remito imprimible |
+| Settings | settings/ | Configuración por secciones |
+
+### Patrones de listado
+
+Ver **erp-patrones-lista.mdc**:
+
+- **Lista paginada** — >100 reg, page/size/total
+- **Lista simple** — ≤50 reg, carga completa
+- **Batch/agregado** — datos agrupados por padre
+
+---
+
+## 7. Dimensión Permisos RBAC
+
+**Quién puede hacer qué.**
+
+Cada módulo declara sus acciones permisibles: read, create, edit, delete, más acciones de negocio (aprobar, rechazar, liquidar). Los permisos viven en el Motor, se devuelven en el token/sesión. El ERP los aplica **exclusivamente** en `{modulo}-view.tsx`. Los hijos solo reciben `canCreate`, `canEdit`, `canDelete`.
+
+### Patrones disponibles
+
+| Patrón | Permisos | Cuándo usar |
+|--------|----------|-------------|
+| **Solo read** | read | Dashboards, reportes |
+| **CRUD básico** | read, create, edit, delete | Módulos estándar |
+| **CRUD + acciones** | CRUD + aprobar, rechazar, etc. | Flujos con estados |
+| **Admin only** | Sin permisos granulares | Configuración sensible |
+
+---
+
+## 8. Dimensión Conocimiento (Cursor .mdc)
+
+**Lo que la IA sabe del módulo.**
+
+Cada módulo tiene `.cursor/rules/modules/{modulo}.mdc` que documenta las 9 dimensiones para **ambas caras** (Motor + ERP):
+
+- Comportamiento declarado
+- Motor — Datos (tablas, schema, migraciones)
+- Motor — API (endpoints, ListParams)
+- Motor — Reglas de negocio
+- ERP — BFF (rutas proxy)
+- ERP — Root URL
+- ERP — Frontend (modelo Devias, componentes, tipos)
+- Permisos RBAC
+- Decisiones técnicas específicas
+- Mejoras pendientes
+
+**Si no está en el .mdc, para Cursor no existe.**
+
+El .mdc incluye globs que cubren ambos repos:
+```yaml
+globs: [
+  "src/components/{modulo}/**/*.tsx",   # ERP
+  "src/app/(private)/app/{modulo}/**",  # ERP
+  "src/app/api/{modulo}/**",            # ERP BFF
+  "app/modules/{modulo}/**/*.py"        # Motor
+]
+```
+
+El orquestador (`ishango-orquestador.mdc`) activa el .mdc correcto según el contexto y conduce el árbol de decisión dimensión por dimensión.
+
+---
+
+## 9. Dimensión Documentación
+
+**Lo que el equipo humano sabe.**
+
+| Artefacto | Ubicación |
+|-----------|-----------|
+| Plan | docs/solicitud-implementacion/ |
+| Resultado | docs/resultado-implementacion/ |
+| Entrada CHANGELOG | CHANGELOG.md (raíz del proyecto) |
+| .mdc módulo | .cursor/rules/modules/{modulo}.mdc |
+
+---
+
+## El .cursor como mente única del sistema
+
+**Decisión de arquitectura acordada:**
+
+El `.cursor` no es "reglas del ERP" ni "reglas del Motor". Es el **conocimiento del sistema iShango completo**.
+
+```
+Fuente única (editar en ambos repos conscientemente)
+      │
+      ├── espejo ──► c:/dev/iShangoERP/.cursor/
+      └── espejo ──► c:/dev/ishango-motor/.cursor/
+```
+
+Desde cualquier proyecto, Cursor conoce todo el sistema:
+- Qué es un módulo en ambas caras (Motor y ERP)
+- Los patrones del Motor (API, DB, endpoints)
+- Los patrones del ERP (BFF, Frontend, Root URL)
+- Cómo se relacionan (Motor → BFF → ERP)
+- Cómo hacer cambios en las dos caras con las mismas reglas, los mismos patrones y el mismo diccionario
+
+> No importa desde qué proyecto te parás: las reglas, los patrones y el diccionario son los mismos. El .cursor es el idioma compartido de todo el sistema.
+
+**Mantenimiento:** Contenido idéntico en ambos repos. Se edita conscientemente en los dos. Sin infraestructura adicional hoy.
+
+---
+
+## Referencias
+
+| Regla | Contenido |
+|-------|-----------|
+| ishango-proyectos-contexto.mdc | Contexto ERP/Motor |
+| ishango-diccionario.mdc | Glosario de términos del sistema |
+| ishango-orquestador.mdc | Orquestador de módulos y workflow |
+| erp-devia-models.mdc | Modelos Frontend (dimensión 6) |
+| erp-patrones-lista.mdc | Patrones listado (dimensiones 1, 6) |
+| erp-crear-modulo.mdc | Proceso crear módulo |

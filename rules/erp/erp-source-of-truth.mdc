@@ -1,0 +1,38 @@
+---
+description: Fuente de verdad del proyecto — .cursor es la autoridad. Docs es información extra.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Fuente de verdad — iShango ERP
+
+## .cursor es la fuente de verdad
+
+**`.cursor/rules/`** es la autoridad para workflow, convenciones, proceso de modelado y reglas del proyecto.
+
+| Qué | Dónde (fuente de verdad) |
+|-----|--------------------------|
+| Proceso crear módulo | `erp-crear-modulo.mdc` |
+| Diccionario de modelos Devias | `erp-devia-models.mdc` |
+| Glosario de términos del sistema | `ishango-diccionario.mdc` |
+| Las 9 dimensiones + catálogo de patrones | `ishango-dimensiones.mdc` |
+| Contexto ERP/Motor cross-repo | `ishango-proyectos-contexto.mdc` |
+| Orquestador + cuestionario creación módulo | `ishango-orquestador.mdc` |
+| Reglas globales ERP | `erp-root.mdc` |
+| Workflow deploy | `workflow.mdc` |
+| Logs Vercel y troubleshooting deploy | `erp-vercel-logs.mdc` |
+| Módulo X (Motor + ERP) | `modules/{modulo}.mdc` |
+
+## docs/ es información extra
+
+La carpeta `docs/` contiene documentación complementaria (planes, resultados, changelogs). **No es fuente de verdad** para el workflow. Si hay conflicto entre docs y .cursor, prevalece .cursor.
+
+## Fuente de datos
+
+- **Motor** es la UNICA fuente de creditos, personas, cuotas, pagos. Odoo y FastAPI migraron a Motor.
+- ERP y Credinter consultan SOLO al Motor (API). No hay otra base para estos datos.
+- Motor corre solo en Digital Ocean (159.89.89.130:8001).
+
+## Regla
+
+Todo lo que afecte al workflow, al proceso de modelado o a las convenciones de código debe estar en `.cursor/rules/`. Los docs pueden ampliar o historiar, pero la autoridad es .cursor.

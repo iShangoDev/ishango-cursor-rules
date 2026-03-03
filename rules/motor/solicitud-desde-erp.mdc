@@ -1,0 +1,33 @@
+---
+description: Procesar requests del ERP cuando el Motor debe implementar algo
+globs: ["docs/solicitud-desde-erp/**/*.md", "docs/solicitud-implementacion/**/*.md"]
+alwaysApply: false
+---
+
+# Solicitud desde ERP
+
+## Regla obligatoria
+
+Cuando el **ERP solicite algo al Motor** (nuevo endpoint, cambio de formato, etc.), el agente debe:
+
+1. **Crear** en ERP: `C:\dev\iShangoERP\docs\solicitud-a-motor\V{X.Y}-Request-Motor.md` (origen)
+2. **Crear** en Motor: `docs/solicitud-desde-erp/V{X.Y}-Request-ERP.md` (copia recibida)
+3. **Actualizar** `docs/solicitud-desde-erp/README.md` con la nueva entrada
+4. **Actualizar** `C:\dev\iShangoERP\docs\solicitud-a-motor\README.md` con la nueva entrada
+5. **Encabezado Motor:** El archivo en el Motor debe indicar explícitamente que es un **request del ERP**
+
+## Formato archivo Motor
+
+- Nombre: `V{X.Y}-Request-ERP.md` (misma versión que el ERP)
+- Primera línea: `> **Request del ERP:** Este plan es una solicitud del repo iShangoERP (V{X.Y})...`
+- Referencia: ERP `docs/solicitud-a-motor/V{X.Y}-Request-Motor.md`
+
+## Flujo
+
+```
+ERP (iShangoERP)                         Motor (ishango-motor)
+─────────────────────────────────────────────────────────────
+docs/solicitud-a-motor/              →   docs/solicitud-desde-erp/
+  V0.11-Request-Motor.md                   V0.11-Request-ERP.md
+  (origen)                                 (request del ERP, mismo contenido)
+```

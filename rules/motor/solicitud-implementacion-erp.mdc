@@ -1,0 +1,44 @@
+---
+description: Motor origina requests al ERP; agente crea plan en Motor y copia en ERP
+globs: ["docs/solicitud-implementacion-erp/**/*.md", "docs/resultado-implementacion/**/*.md", "C:/dev/iShangoERP/docs/solicitud-implementacion/**/*.md"]
+alwaysApply: false
+---
+
+# Solicitud implementación ERP
+
+## Origen: Motor
+
+El Motor **crea** el request cuando cambia algo que impacta al ERP. No depende del ERP. El agente en workspace Motor crea **ambos** archivos en un solo flujo.
+
+**Path ERP (repo hermano):** `C:\dev\iShangoERP`
+
+## Regla obligatoria
+
+Cuando se implemente una solicitud del Motor que **impacte al ERP**, el agente debe:
+
+1. **Crear** en Motor: `docs/solicitud-implementacion-erp/V{X.Y}-Plan-Implementacion-ERP.md`
+2. **Crear** en ERP: `C:\dev\iShangoERP\docs\solicitud-implementacion\V{X.Y}-Plan-Implementacion.md`
+3. **Actualizar** ERP: `C:\dev\iShangoERP\docs\solicitud-implementacion\README.md` con la nueva entrada
+4. **Encabezado ERP:** El archivo en el ERP debe indicar explícitamente que es un **request del Motor**
+
+## Checklist agente
+
+- [ ] Plan creado en Motor (solicitud-implementacion-erp/)
+- [ ] Copia creada en ERP con encabezado "Request del Motor"
+- [ ] README del ERP actualizado
+
+## Formato archivo ERP
+
+- Nombre: `V{X.Y}-Plan-Implementacion.md` (misma versión que el Motor)
+- Primera línea: `> **Request del Motor:** Este plan es una solicitud del repo iShangoMotor (V{X.Y})...`
+- Referencia: Motor `docs/solicitud-implementacion-erp/V{X.Y}-Plan-Implementacion-ERP.md`
+
+## Flujo
+
+```
+Motor (ishango-motor)                    ERP (iShangoERP)
+─────────────────────────────────────────────────────────────
+docs/solicitud-implementacion-erp/  →   docs/solicitud-implementacion/
+  V{X.Y}-Plan-Implementacion-ERP.md       V{X.Y}-Plan-Implementacion.md
+  (origen, Motor crea)                   (copia, mismo contenido + encabezado)
+```

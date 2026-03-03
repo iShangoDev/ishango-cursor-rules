@@ -1,0 +1,25 @@
+---
+description: Módulo Notificaciones ERP — bandeja in-app y estado de lectura
+globs: ["src/components/notificaciones/**/*.tsx", "src/components/notificaciones/**/*.ts", "src/app/(private)/app/notificaciones/**/*.tsx", "src/app/api/notificaciones/**/*.ts"]
+---
+
+# Módulo Notificaciones — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: Notifications feed
+- Referencia principal: `src/components/dashboard/customer/notifications.tsx`
+- Referencia secundaria: `src/components/dashboard/settings/email-notifications.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Bandeja in-app con estado leído/no leído y acciones rápidas.
+
+## Flujo obligatorio
+`Motor -> /api/notificaciones -> page.tsx -> notificaciones-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla notificaciones, schema, endpoints `/v1/notificaciones/`.

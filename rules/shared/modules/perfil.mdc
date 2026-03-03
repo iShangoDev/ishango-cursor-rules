@@ -1,0 +1,131 @@
+---
+description: Agente Módulo Perfil ERP — aplica cuando Cursor edita archivos en settings/, api/perfil/ o components/settings/
+globs: ["src/app/(private)/app/settings/**/*.tsx", "src/app/api/perfil/**/*.ts", "src/components/settings/**/*.tsx", "src/lib/data/perfil-server.ts"]
+---
+
+# Módulo Perfil — iShangoERP
+
+## Descripción
+Perfil del usuario autenticado — ver y editar datos básicos (Account) y cambiar contraseña (Security). Adaptado de `_devias-kit/app/settings/` y `_devias-kit/components/settings/`.
+
+**Diferencia clave con módulo Usuarios:** Perfil = usuario actual desde sesión. Usuarios = CRUD admin con lista y gestión de terceros. Son módulos distintos con BFF distintos.
+
+## Estructura de archivos
+```
+src/
+├── app/
+│   ├── (private)/app/settings/
+│   │   ├── layout.tsx              ← SideNav con Account y Security únicamente
+│   │   ├── account/page.tsx        ← datos básicos del usuario
+│   │   └── security/page.tsx       ← cambio de contraseña
+│   └── api/perfil/
+│       ├── route.ts                ← GET + PATCH perfil del usuario actual
+│       └── cambiar-password/
+│           └── route.ts            ← POST cambiar contraseña
+├── components/settings/
+│   ├── account-details.tsx         ← adaptado de _devias-kit (nombre + email readonly)
+│   ├── password-form.tsx           ← adaptado de _devias-kit (old + new + confirm)
+│   └── settings-side-nav.tsx       ← SideNav con Mi cuenta y Seguridad
+└── lib/
+    └── session.ts                 ← getSessionUserId() — lee user_id de cookie
+```
+
+## BFF — contratos
+
+| Ruta BFF | Método | Proxy Motor | Notas |
+|----------|--------|-------------|-------|
+| `/api/perfil` | GET | `GET /v1/usuarios/{id}` | id desde sesión |
+| `/api/perfil` | PATCH | `PATCH /v1/usuarios/{id}` | solo `nombre` |
+| `/api/perfil/cambiar-password` | POST | `POST /v1/usuarios/{id}/cambiar-password` | id desde sesión |
+
+## Frontera server/client (account)
+
+- `src/app/(private)/app/settings/account/page.tsx` debe cargar perfil inicial en server (`getPerfilServer`).
+- `account-details.tsx` recibe datos iniciales y deja en cliente solo la mutación `PATCH /api/perfil`.
+- Evitar fetch inicial obligatorio en `useEffect` cuando la página ya entrega props iniciales.
+
+## Regla crítica — IDOR
+
+```typescript
+// SIEMPRE obtener el id del usuario desde la sesión — nunca de la URL
+// src/app/api/perfil/route.ts
+
+import { getSessionUserId } from "@/lib/session";
+
+export async function GET() {
+  const usuarioId = await getSessionUserId();
+  if (!usuarioId) return NextResponse.json({ code: "UNAUTHORIZED" }, { status: 401 });
+  return motorFetch(`/v1/usuarios/${usuarioId}`);
+}
+
+// NUNCA hacer esto:
+// export async function GET(req, { params }) {
+//   return motorFetch(`/v1/usuarios/${params.id}`); // IDOR — cualquier id puede pasar
+// }
+```
+
+El `user_id` se almacena en la cookie `ishango_session` junto con `access_token` y `refresh_token` (login y refresh lo setean).
+
+## account-details.tsx — campos
+
+| Campo | Comportamiento |
+|-------|---------------|
+| Nombre | TextField editable — PATCH `/api/perfil` |
+| Email | TextField disabled + readonly — inmutable |
+| Avatar | Deshabilitado en V0.6 — tooltip "Disponible próximamente" |
+
+Campos de Devias eliminados: Dial code, Phone, Title, Biography.
+
+## password-form.tsx — campos
+
+| Campo | Validación |
+|-------|-----------|
+| Contraseña actual | required |
+| Nueva contraseña | min 8 caracteres |
+| Confirmar nueva contraseña | debe coincidir con Nueva — validar en cliente |
+
+```typescript
+// Flujo de éxito
+// POST /api/perfil/cambiar-password → 204
+// → Snackbar "Contraseña actualizada correctamente"
+// → Limpiar campos del form
+
+// Errores del Motor que mostrar inline:
+// 400 "Contraseña actual incorrecta" → error en campo Contraseña actual
+// 400 "Las contraseñas no coinciden" → error en campo Confirmar
+// 400 "La contraseña debe tener al menos 8 caracteres" → error en campo Nueva contraseña
+```
+
+## Layout de settings — SideNav adaptado
+
+```typescript
+// Solo dos items — eliminar Billing, Notifications, Integrations, Team
+const navItems = [
+  { title: "Mi cuenta", href: "/app/settings/account", icon: UserCircleIcon },
+  { title: "Seguridad", href: "/app/settings/security", icon: LockKeyIcon },
+];
+```
+
+## UserPopover — links
+
+```typescript
+{ label: "Mi perfil", href: "/app/settings/account" }
+{ label: "Seguridad", href: "/app/settings/security" }
+// Billing eliminado
+```
+
+## Motor — No implementado (módulo dedicado)
+
+> El perfil usa los endpoints de `usuarios/` del Motor (`/v1/usuarios/{id}`, `/v1/usuarios/{id}/cambiar-password`).
+> No tiene módulo Motor propio — reutiliza `app/modules/usuarios/`.
+> Si se crea lógica propia de perfil en Motor, documentar aquí.
+
+---
+
+## Referencia Devias
+
+Componentes base en `_devias-kit/components/settings/` y `components/dashboard/settings/`.
+Páginas NO implementadas en V0.6 (quedan en `_devias-kit/` como referencia):
+- billing, notifications, integrations, team
+- multi-factor (2FA)
+- login-history

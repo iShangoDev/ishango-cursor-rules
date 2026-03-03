@@ -1,0 +1,25 @@
+---
+description: Módulo Etiquetas ERP — catálogo y asignación polimórfica
+globs: ["src/components/etiquetas/**/*.tsx", "src/components/etiquetas/**/*.ts", "src/app/(private)/app/etiquetas/**/*.tsx", "src/app/api/etiquetas/**/*.ts"]
+---
+
+# Módulo Etiquetas — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: Labels management
+- Referencia principal: `src/components/dashboard/mail/label-item.tsx`
+- Referencia secundaria: `src/components/dashboard/file-storage/item-modal.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Catálogo de etiquetas + chips + asignación/desasignación por entidad.
+
+## Flujo obligatorio
+`Motor -> /api/etiquetas -> page.tsx -> etiquetas-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla, schema, endpoints `/v1/etiquetas/`.

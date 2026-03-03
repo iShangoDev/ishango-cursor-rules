@@ -1,0 +1,183 @@
+---
+description: Agente Módulo Créditos — aplica cuando Cursor edita archivos del módulo creditos en ERP o Motor
+globs: [
+  "src/components/creditos/**/*.tsx",
+  "src/components/creditos/**/*.ts",
+  "src/app/(private)/app/creditos/**/*.tsx",
+  "src/app/api/creditos/**/*.ts",
+  "app/modules/creditos/**/*.py"
+]
+---
+
+# Módulo Créditos — iShango Sistema
+
+Gestión de créditos, cuotas, pagos e imputación. **Motor es la UNICA fuente** de estos datos. Odoo/FastAPI migraron a Motor. Credinter y ERP consultan solo al Motor.
+
+Ver `docs/solicitud-desde-erp/V0.30-Credinter-Migracion.md` en Motor (plan maestro).
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Crea** — apertura de crédito, generación de cuotas
+- **Modifica** — cambio de estado, imputación de pagos
+- **Elimina** — soft delete (baja lógica)
+- **Lee** — listado paginado, detalle con cuotas y pagos
+- **Recibe** — sincronización desde Credinter (solicitudes y pagos vía API Key)
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Principal + detalle (múltiples tablas relacionadas)
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `creditos` | Crédito con persona_id, monto, cuotas, tasa_mensual, estado | persona_id → personas |
+| `cuotas` | Cuota de crédito (amortización francesa). Estados: pendiente, pagada, vencida | credito_id → creditos |
+| `pagos` | Pago imputado a cuotas | credinter_payment_id UNIQUE nullable |
+| `pago_evento` | Evento de imputación (dedup) | pago_id → pagos |
+| `producto_credito` | Producto/línea de crédito | — |
+| `producto_tasa` | Tasa por producto | producto_credito_id |
+
+### Trazabilidad Credinter
+
+- `creditos.credinter_request_id` — UNIQUE nullable, idempotencia sync
+- `pagos.credinter_payment_id` — UNIQUE nullable, idempotencia sync
+
+### Estructura de archivos Motor
+
+```
+app/modules/creditos/
+├── models/
+│   ├── credito.py
+│   ├── cuota.py
+│   ├── pago.py
+│   ├── pago_evento.py
+│   ├── producto.py
+│   └── producto_tasa.py
+├── schemas/
+├── repository.py
+├── service.py            # incluye imputación
+├── router.py             # /v1/creditos/*, /v1/pagos/*
+├── router_sync.py        # /v1/credinter/* (auth API Key)
+└── utils/
+    └── amortizacion.py   # cálculo francesa
+```
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD + acciones de negocio + Import (sync Credinter)
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | `/v1/creditos/` | Listado paginado | ✅ JWT |
+| POST | `/v1/creditos/` | Crear crédito | ✅ JWT |
+| GET | `/v1/creditos/{id}` | Detalle | ✅ JWT |
+| PATCH | `/v1/creditos/{id}` | Actualizar | ✅ JWT |
+| DELETE | `/v1/creditos/{id}` | Soft delete | ✅ JWT |
+| GET | `/v1/creditos/{id}/cuotas` | Cuotas del crédito (ordenadas por número) | ✅ JWT |
+| POST | `/v1/creditos/simular` | Previsualización amortización francesa (sin persistir) | ✅ JWT |
+| POST | `/v1/creditos/existencia-batch` | Batch check IDs | ✅ JWT |
+| POST | `/v1/pagos/imputar` | Imputar pago a cuotas | ✅ JWT |
+| POST | `/v1/credinter/solicitud` | Sync desde Credinter (API Key) | API Key |
+| POST | `/v1/credinter/pago` | Sync pagos MP (API Key) | API Key |
+
+---
+
+## Motor — Reglas de negocio
+
+- Cuota más vieja primero en imputación
+- Pago parcial soportado; excedente → saldo a favor
+- Amortización francesa para cálculo de cuotas
+- `credinter_request_id` y `credinter_payment_id` UNIQUE nullable para idempotencia de sync
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy puro
+
+- GET `/api/creditos?page=1&size=25&...` → forwardea al Motor
+- POST `/api/creditos` → `CreditoCreatePayload`
+- GET/PATCH/DELETE `/api/creditos/[id]`
+- GET `/api/creditos/[id]/cuotas`
+- POST `/api/pagos/imputar` (wizard imputar)
+
+Todos usan `motorFetch` y `getMotorUrl()`.
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** List + detail + wizard
+
+```
+/app/creditos              ← listado paginado
+/app/creditos/[id]         ← detalle con tabs (cuotas, pagos)
+/app/creditos/imputar      ← wizard imputar pagos
+```
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** Detalle con Subentidades
+**Referencia:** `components/dashboard/customer/`
+**Patrón listado:** Lista paginada
+
+### Estructura de archivos ERP
+
+```
+src/
+├── app/
+│   ├── (private)/app/creditos/
+│   │   ├── page.tsx                    ← Server Component (lista)
+│   │   ├── [id]/page.tsx               ← Server Component (detalle)
+│   │   └── imputar/page.tsx            ← Wizard imputar pagos
+│   └── api/creditos/
+│       ├── route.ts                    ← GET list + POST create
+│       └── [id]/
+│           └── route.ts               ← GET detail + PATCH + DELETE
+├── components/creditos/
+│   ├── creditos-view.tsx              ← Client — estado local, permisos
+│   ├── credito-detail-view.tsx        ← Detalle con tabs cuotas + pagos
+│   ├── creditos-table.tsx             ← tabla MUI
+│   ├── cuotas-table.tsx               ← Tabla cuotas con filas expandibles
+│   ├── credito-form.tsx               ← form crear/editar
+│   ├── credito-crear-modal.tsx        ← modal crear
+│   ├── credito-editar-modal.tsx       ← modal editar
+│   ├── credito-crear-wizard.tsx       ← wizard crear préstamo (simular → confirmar)
+│   ├── imputar-view.tsx               ← wizard imputar CSV (upload → preview → confirm → resultado)
+│   ├── creditos.types.ts              ← tipos TS (espejo Motor)
+│   └── use-creditos.ts                ← mutations BFF
+```
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** CRUD básico
+
+`puedeHacer('creditos', 'create')`, `puedeHacer('creditos', 'edit')`, `puedeHacer('creditos', 'delete')`
+
+Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`, `canDelete` a hijos.
+
+---
+
+## Decisiones técnicas
+
+- Motor es la ÚNICA fuente de datos — Odoo/FastAPI migraron
+- Prefetch: `creditosQueryKey.list({ page: 1, size: 25 })` en `use-prefetch-module.ts` (patrón paginado como personas)
+- Wizard imputar: upload CSV → preview → confirm → resultado (no modal simple)
+- Ver `docs/IMPLEMENTACION-HU1-ENVIAR-A-ERP.md` para flujo Credinter → solicitud crédito
+
+---
+
+## Mejoras posibles
+
+- Filtros avanzados: por estado, rango de fechas, monto
+- Exportación de listado a CSV
+- Vista de deudor: créditos agrupados por persona

@@ -1,0 +1,119 @@
+---
+description: Glosario de términos del sistema iShango — definiciones canónicas. Referencia para todos los archivos .mdc y código del sistema.
+globs: []
+alwaysApply: false
+---
+
+# Diccionario iShango — Glosario de Términos
+
+Definiciones canónicas del sistema. Nadie inventa términos fuera de este glosario. Si un concepto no está aquí, se agrega aquí primero.
+
+---
+
+## Entidades del sistema
+
+| Término | Definición |
+|---------|------------|
+| **Módulo** | Unidad funcional autónoma del ERP/Motor con identidad propia en cada capa del sistema (tabla, API, BFF, ruta, componentes, permisos, .mdc). Un módulo no existe hasta tener las 9 dimensiones cubiertas. |
+| **Motor** | Servicio backend (FastAPI + PostgreSQL) de iShango. Fuente de verdad de todos los datos de negocio (créditos, personas, cuotas, pagos). Corre en Digital Ocean. Repo: iShangoDev/iShangoMotor. |
+| **ERP** | Frontend + BFF (Next.js 15 + MUI). Consume el Motor vía API. No tiene base de datos propia para datos de negocio. Deploy en Vercel. Repo: iShangoDev/iShangoERP. |
+| **BFF** | Backend For Frontend — capa proxy en `app/api/{modulo}/` del ERP. Revalida sesión, traduce errores, forwardea al Motor. Nunca tiene lógica de negocio. |
+| **Credinter** | Proyecto futuro. Fuera de alcance actual. Cuando se sume, hereda el mismo `.cursor` y agrega solo lo propio. |
+
+---
+
+## Conceptos arquitectónicos
+
+| Término | Definición |
+|---------|------------|
+| **Dimensión** | Una de las 9 capas que definen un módulo completo. Ver `ishango-dimensiones.mdc`. |
+| **Patrón** | Opción concreta dentro de una dimensión. Ej. "Proxy puro" (patrón de BFF), "CRUD estándar" (patrón de API). |
+| **Modelo** | En contexto Frontend: uno de los modelos visuales del Devias Kit (ej. CRUD Lista Simple, Detalle Subentidades). En contexto DB: el SQLModel de una entidad. |
+| **Mente única** | Principio arquitectónico: el `.cursor` es idéntico en ERP y Motor. No hay reglas por proyecto, hay reglas del sistema. |
+| **Fuente de verdad** | Para `.cursor`: el contenido idéntico en ambos repos. Para datos de negocio: el Motor. |
+| **Soft delete** | Eliminación lógica. Setea `deleted_at`, nunca elimina el registro físicamente de la DB. |
+
+---
+
+## Comportamientos de módulo (Dimensión 2)
+
+| Término | Definición |
+|---------|------------|
+| **Recibe** | El módulo lee data de una fuente externa (import, webhook, otro sistema). No genera la data, la ingiere. |
+| **Transfiere** | El módulo envía data a otro módulo o sistema externo. Export, webhook, integración downstream. |
+| **Crea** | El módulo genera registros nuevos en su propia tabla. |
+| **Modifica** | El módulo actualiza registros existentes. Incluye cambios de estado. |
+| **Elimina** | El módulo realiza soft delete de registros (nunca hard delete). |
+| **Lee** | El módulo solo consulta datos, no los altera. Dashboard, reporte. |
+
+---
+
+## Capas del flujo de datos
+
+| Término | Definición |
+|---------|------------|
+| **page.tsx** | Server Component de Next.js. Fetcha el BFF, pasa props. Sin estado, sin hooks de UI. |
+| **{modulo}-view.tsx** | Client Component principal. Recibe JSON, maneja estado local, aplica permisos via `puedeHacer()`. |
+| **{modulo}-table.tsx** | Componente de tabla MUI. Recibe datos como props, no fetcha. |
+| **use-{modulo}.ts** | Hook de mutations (POST/PATCH/DELETE) hacia el BFF. No maneja GET ni estado global. |
+| **{modulo}.types.ts** | Espejo manual del schema Pydantic del Motor. Primer archivo en actualizarse ante un breaking change del Motor. |
+| **motorFetch** | Helper del ERP para llamar al Motor desde el BFF. Incluye autenticación y manejo de errores. |
+| **getMotorUrl()** | Helper que devuelve `MOTOR_URL` del entorno. Server-side only. |
+
+---
+
+## Patrones de datos (Dimensión 1)
+
+| Término | Definición |
+|---------|------------|
+| **Tabla única** | Módulo con una sola tabla principal en PostgreSQL. Entidad sin subentidades. |
+| **Principal + detalle** | Tabla principal con una o más tablas hija en relación 1:N. Ej. crédito + cuotas. |
+| **Principal + estados** | Tabla principal con tabla de historial/transiciones. Para flujos con trazabilidad. |
+| **Junction** | Tabla intermedia para relaciones many-to-many. Ej. persona-etiqueta, usuario-rol. |
+
+---
+
+## Estructura de módulo Motor
+
+| Término | Definición |
+|---------|------------|
+| **model.py** | SQLModel de la entidad + enums de estado. Define la tabla en PostgreSQL. |
+| **schema.py** | Schemas Pydantic: `{Entidad}Create`, `{Entidad}Update`, `{Entidad}Read`. |
+| **repository.py** | CRUD + filtros sobre la DB. Sin lógica de negocio. |
+| **service.py** | Reglas de negocio del módulo. Orquesta el repository. |
+| **router.py** | Endpoints FastAPI del módulo con prefix `/v1/{modulo}`. |
+
+---
+
+## Estructura de módulo ERP
+
+| Término | Definición |
+|---------|------------|
+| **{Entidad}CreatePayload** | Tipo TypeScript del body para POST. |
+| **{Entidad}UpdatePayload** | Tipo TypeScript del body para PATCH. |
+| **{Modulo}ViewProps** | Props que recibe `{modulo}-view.tsx` desde `page.tsx`. |
+| **PaginatedResponse\<T\>** | Tipo genérico para respuestas paginadas del Motor. |
+| **{Entidad}Estado** | Enum de estados de la entidad. |
+| **canCreate / canEdit / canDelete** | Props booleanas que `{modulo}-view.tsx` pasa a sus hijos para control de permisos. |
+
+---
+
+## Permisos
+
+| Término | Definición |
+|---------|------------|
+| **puedeHacer(modulo, accion)** | Función del AuthContext. Se llama **únicamente** en `{modulo}-view.tsx`. Nunca en hijos ni en `page.tsx`. |
+| **RBAC** | Role-Based Access Control. Los permisos viven en el Motor, se devuelven en el token/sesión. |
+| **Acciones de negocio** | Permisos más allá del CRUD: aprobar, rechazar, liquidar, etc. Declarados por módulo. |
+
+---
+
+## Infraestructura y deploy
+
+| Término | Definición |
+|---------|------------|
+| **MOTOR_URL** | Variable de entorno server-side. URL del Motor. El browser nunca la recibe. |
+| **NEXT_PUBLIC_AUTH_STRATEGY** | Variable pública. Valor `MOTOR` activa el login iShango. Crítico para producción. |
+| **motorMiddleware** | Middleware de Next.js que protege `/app/*` y `/api/*`. |
+| **ishango_session** | Cookie httpOnly de sesión. SameSite=Lax, Secure en producción. |
+| **createServerLogger** | Helper para logging en API routes de Vercel. |

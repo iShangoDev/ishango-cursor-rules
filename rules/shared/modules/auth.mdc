@@ -1,0 +1,279 @@
+---
+description: Agente Módulo Auth — aplica cuando Cursor edita archivos de auth en ERP o Motor
+globs: [
+  "src/components/auth/**/*.tsx",
+  "src/components/auth/**/*.ts",
+  "src/app/auth/**/*.tsx",
+  "src/app/api/auth/**/*.ts",
+  "src/lib/fetch-client.ts",
+  "src/middleware.ts",
+  "app/modules/auth/**/*.py"
+]
+---
+
+# Módulo Auth — iShango Sistema
+
+Autenticación JWT del sistema. El Motor es la única fuente de verdad de auth para todo el ecosistema iShango. El ERP NO implementa lógica de auth — solo consume el Motor vía BFF. El browser nunca ve el JWT.
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Lee** — validación de sesión, estado de usuario autenticado
+- **Modifica** — refresh de tokens, cambio de empresa activa
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Tabla única (compartida con módulo usuarios)
+
+### Tabla
+
+`usuarios` — compartida con el módulo usuarios. El modelo `Usuario` vive en `auth/model.py`.
+
+```python
+class Usuario(SQLModel, table=True):
+    __tablename__ = "usuarios"
+    id: uuid = Field(default_factory=uuid4, primary_key=True)
+    nombre: str
+    email: str = Field(unique=True, index=True)
+    password_hash: str
+    activo: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    deleted_at: datetime | None = Field(default=None)
+```
+
+### Schemas Motor
+
+```python
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: UsuarioRead          # campo real es "user" (no "usuario")
+    empresa: EmpresaRead       # campo real es "empresa" (no "empresa_activa")
+    modulos: list[ModuloConPermisosRead]
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    refresh_token: str         # V0.28 — rotación, invalida el anterior
+    token_type: str = "bearer"
+    user: UsuarioRead
+    empresa: EmpresaRead
+    modulos: list[ModuloConPermisosRead]
+
+class MeResponse(BaseModel):
+    user: UsuarioRead
+    empresa: EmpresaRead
+    modulos: list[ModuloConPermisosRead]
+```
+
+> **Desviación conocida:** El fundacional define `usuario` y `empresa_activa`. La implementación usa `user` y `empresa`. Normalizar en V0.4. Hasta entonces, respetar los nombres actuales para no romper el contrato con el ERP.
+
+### Archivos del módulo Motor
+
+```
+app/modules/auth/
+├── __init__.py
+├── model.py         # Usuario SQLModel
+├── schema.py        # LoginRequest, LoginResponse, RefreshRequest, RefreshResponse, MeResponse
+├── repository.py    # UsuarioRepository: get_by_email, get_by_id
+├── service.py       # AuthService: login, refresh, me, create_usuario_inicial
+└── router.py        # GET /me, POST /login, /refresh, /logout — prefijo /v1/auth
+```
+
+### Seed inicial
+
+```
+migrations/versions/20250226_seed_usuario_inicial.py
+Email: admin@ishango.com / Password: admin123
+Cambiar en producción antes de V1.0
+```
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** Solo lectura + acciones de sesión
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/v1/auth/me` | Sesión actual — user + empresa + modulos, read-only, no renueva tokens (V0.9) |
+| POST | `/v1/auth/login` | Login — devuelve JWT + user + empresa + modulos |
+| POST | `/v1/auth/refresh` | Refresh — devuelve nuevo access_token y refresh_token (V0.28) |
+| POST | `/v1/auth/logout` | Logout stateless — el BFF limpia la cookie |
+
+---
+
+## Motor — Reglas de negocio
+
+1. Motor es la única fuente de verdad de auth — nunca delegar validación al ERP
+2. Passwords: bcrypt directo (passlib removido por incompatibilidad con bcrypt 5.x)
+3. JWT payload: `{ "sub": uuid-usuario, "empresa_id": uuid-empresa (opcional), "exp": timestamp, "type": "access"|"refresh" }`
+4. Access token: 480 min (8h). Refresh token: 30 días
+5. Login fallido: siempre HTTP 401 con `"Credenciales incorrectas"` — nunca distinguir email vs password
+6. Usuario inactivo (`activo=False`): HTTP 401, mismo mensaje
+7. Soft delete: `deleted_at != null` → usuario no puede autenticarse
+8. Logout es stateless en V0.x — el BFF limpia la cookie, el Motor no invalida el token
+9. Módulos desde DB (V0.4+): via `RBACRepository.get_modulos_con_permisos()`. `dashboard` siempre incluido.
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy + transformación (adapta cookie + shape)
+
+### POST /api/auth/login
+
+```typescript
+// Request: { email: string, password: string }
+// Motor response: { access_token, refresh_token, token_type, user, empresa, modulos }
+// Acción BFF:
+// 1. Guarda tokens en cookie ishango_session (httpOnly)
+// 2. Devuelve al browser: { user, empresaActiva: empresa, modulos }
+// NUNCA devuelve tokens al browser
+```
+
+### POST /api/auth/refresh
+
+```typescript
+// BFF lee cookie ishango_session, extrae refresh_token
+// Llama: POST /v1/auth/refresh { refresh_token }
+// Actualiza cookie con nuevos tokens
+// Devuelve: { ok: true, user, empresaActiva, modulos }
+```
+
+### POST /api/auth/logout
+
+```typescript
+// BFF elimina cookie ishango_session
+// Devuelve: { ok: true }
+```
+
+### Cookie — especificación exacta
+
+```typescript
+cookies().set("ishango_session", JSON.stringify({ access_token, refresh_token }), {
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.ENVIRONMENT !== "local",
+  path: "/",
+})
+// Nombre: "ishango_session" — este nombre exacto, siempre
+```
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** Rutas públicas de auth
+
+```
+/auth/login    ← página de login iShango
+```
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** N/A (layout propio de auth)
+
+### Archivos ERP
+
+```
+src/
+├── middleware.ts                              ← protección de rutas (motorMiddleware)
+├── components/auth/
+│   ├── motor-auth-context.tsx                 ← AuthContext principal (kebab-case)
+│   ├── centered-layout.tsx
+│   ├── split-layout.tsx
+│   └── motor/
+│       └── login-form.tsx                     ← formulario de login
+├── app/auth/
+│   └── login/                                 ← página de login iShango
+└── app/api/auth/
+    ├── login/route.ts
+    ├── refresh/route.ts
+    └── logout/route.ts
+```
+
+### motor-auth-context.tsx — contrato
+
+```typescript
+interface AuthContextType {
+  user: Usuario | null
+  empresaActiva: Empresa | null    // Motor devuelve "empresa", contexto lo expone como "empresaActiva"
+  modulos: ModuloConPermisos[]
+  isAuthenticated: boolean
+  isLoading: boolean
+  login: (email: string, password: string) => Promise<void>
+  logout: () => Promise<void>
+  refresh: () => Promise<void>
+  switchEmpresa: (empresaId: string) => Promise<void>
+  puedeHacer: (modulo: string, permiso: string) => boolean
+}
+```
+
+### Interceptor 401 — fetchWithAuthGuard
+
+```typescript
+// src/lib/fetch-client.ts — usar en TODOS los fetch del lado cliente
+export async function fetchWithAuthGuard(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    await fetch("/api/auth/logout", { method: "POST" });
+    globalThis.location.href = "/auth/login?reason=session_expired";
+    throw new Error("SESSION_EXPIRED");
+  }
+  return res;
+}
+// Solo para cliente. El BFF (motor-fetch.ts) es server-side — no usar ahí.
+```
+
+### Sesión expirada
+
+- `motor-auth-context.tsx`: en el `catch` del useEffect → `router.replace("/auth/login?reason=session_expired")`
+- `login-form.tsx`: si `reason === "session_expired"` → Alert "Tu sesión expiró. Por favor iniciá sesión nuevamente."
+
+### middleware.ts
+
+- Usa `motorMiddleware` cuando `NEXT_PUBLIC_AUTH_STRATEGY === "MOTOR"`
+- Protege `/app/*` y `/api/*`
+- Rutas públicas: `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`, `/auth/login`
+- Sin cookie `ishango_session` → redirect a `/auth/login`
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** Admin only (no aplica RBAC granular — es la capa de auth misma)
+
+`puedeHacer()` se llama **únicamente** en `{modulo}-view.tsx` — nunca en `page.tsx` ni hijos.
+Sidebar: renderiza solo los módulos que llegaron en `modulos[]` del login.
+
+---
+
+## Variables de entorno requeridas
+
+```
+MOTOR_URL=http://159.89.89.130:8001   # server-side only — nunca al browser
+NEXTAUTH_SECRET=...                    # firma de cookie
+NEXT_PUBLIC_AUTH_STRATEGY=MOTOR        # activa motorMiddleware — CRÍTICO en producción
+ENVIRONMENT=local|staging|production
+```
+
+---
+
+## Decisiones técnicas
+
+- **kebab-case** para archivos: `motor-auth-context.tsx`
+- **Cookie httpOnly** sobre localStorage: protección XSS
+- **SameSite=Lax**: balance entre seguridad CSRF y usabilidad
+- **Logout stateless**: sin blacklist de tokens en V0.x — simplicidad
+- **bcrypt directo** en lugar de passlib: passlib es incompatible con bcrypt 5.x
+- **`user` en lugar de `usuario`**: refleja el campo real del Motor (normalizar en V0.4)
+- **empresa y modulos desde DB**: V0.4 usa RBACRepository para resolver empresa y modulos en login

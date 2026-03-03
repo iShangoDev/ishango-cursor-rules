@@ -1,0 +1,225 @@
+---
+description: Agente Módulo Usuarios — aplica cuando Cursor edita archivos del módulo usuarios en ERP o Motor
+globs: [
+  "src/components/usuarios/**/*.tsx",
+  "src/components/usuarios/**/*.ts",
+  "src/app/(private)/app/usuarios/**/*.tsx",
+  "src/app/api/usuarios/**/*.ts",
+  "src/lib/data/usuarios-server.ts",
+  "app/modules/usuarios/**/*.py"
+]
+---
+
+# Módulo Usuarios — iShango Sistema
+
+CRUD de usuarios del sistema. El modelo `Usuario` vive en `auth/model.py` (Motor) — el módulo usuarios agrega el router y la lógica de gestión. No maneja autenticación (eso es `auth/`).
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Crea** — alta de usuario nuevo (nombre + email + password)
+- **Modifica** — actualización de nombre y estado activo/inactivo
+- **Lee** — listado paginado con filtros, detalle con roles asignados
+
+> No hay DELETE — los usuarios se desactivan (`activo=False`).
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Tabla única (modelo vive en auth/)
+
+### Tabla
+
+`usuarios` — ya existe desde migración 001. Sin cambios de schema en V0.5.
+
+| Campo | Tipo | Reglas |
+|-------|------|--------|
+| `id` | UUID | PK, generado |
+| `email` | str | unique, inmutable post-creación |
+| `password_hash` | str | hasheado con bcrypt, nunca en respuesta |
+| `nombre` | str | editable |
+| `activo` | bool | editable — false = desactivado |
+| `created_at` | datetime | auto |
+| `updated_at` | datetime | actualizar en cada PATCH |
+| `deleted_at` | datetime\|None | soft delete — solo vía DB directa, no por API |
+
+### Schemas Motor
+
+```python
+class UsuarioRead(BaseModel): id, email, nombre, activo, created_at, updated_at
+class UsuarioReadDetalle(UsuarioRead): roles: list[RolEnUsuario]
+class UsuarioCreate(BaseModel): email, password, nombre
+class UsuarioUpdate(BaseModel): nombre?, activo?
+class CambiarPasswordRequest(BaseModel): password_actual, password_nuevo, password_confirmacion
+```
+
+### Archivos del módulo Motor
+
+```
+app/modules/usuarios/
+├── __init__.py
+├── schema.py       # UsuarioRead, UsuarioReadDetalle, RolEnUsuario, UsuarioCreate, UsuarioUpdate, CambiarPasswordRequest
+├── repository.py   # UsuarioRepository — get_list, get_by_id, exists_by_email, create, update, update_password
+├── service.py      # UsuarioService — inyecta RBACRepository para get_by_id_con_roles (V0.8)
+└── router.py       # prefix="/usuarios"
+```
+
+**Excepción arquitectura:** `usuarios/service` importa `RBACRepository` para orquestar `get_by_id_con_roles`. El JOIN vive en rbac; el service solo combina resultados. Regla: repositorios no cruzan; services pueden orquestar.
+
+```python
+# Importar modelo desde auth, no redefinir
+from app.modules.auth.model import Usuario
+```
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD sin DELETE + acción cambiar-password
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | `/v1/usuarios/` | Lista paginada (`?page=&size=&activo=&q=`) | ✅ |
+| POST | `/v1/usuarios/` | Crear usuario | ✅ |
+| GET | `/v1/usuarios/{id}` | Detalle — acepta `?include=roles` | ✅ |
+| PATCH | `/v1/usuarios/{id}` | Actualizar nombre y/o activo | ✅ |
+| POST | `/v1/usuarios/{id}/cambiar-password` | Cambiar contraseña (solo propio usuario) | ✅ |
+
+**GET /v1/usuarios/{id}?include=roles (V0.8):** Con `include=roles` devuelve `UsuarioReadDetalle`. `empresa_id` del JWT o fallback a `RBACRepository.get_empresa_activa_usuario()`.
+
+---
+
+## Motor — Reglas de negocio
+
+1. **Email inmutable** — PATCH ignora el campo `email`. Email nunca cambia post-creación.
+2. **409 email duplicado** — POST devuelve 409 si el email ya existe (incluso en `deleted_at != null`)
+3. **Password nunca en respuesta** — `UsuarioRead` no incluye `password_hash`
+4. **Password hasheado con bcrypt** — usar `get_password_hash()` de `app.core.security`
+5. **Sin DELETE** — solo desactivar (`activo=False`) via PATCH
+6. **Listado excluye `deleted_at != null`** — siempre `WHERE deleted_at IS NULL`
+7. **Filtro `q`** — búsqueda ILIKE en `nombre` OR `email`
+8. **cambiar-password** — solo el propio usuario. 403 si intenta cambiar otro. 400 si validaciones fallan. 204 en éxito.
+
+### Validaciones cambiar-password
+
+| Validación | Error |
+|-----------|-------|
+| `current_user["sub"] != usuario_id` | 403 Forbidden |
+| Usuario no existe | 404 |
+| `password_actual` incorrecto | 400 "Contraseña actual incorrecta" |
+| `password_nuevo != password_confirmacion` | 400 "Las contraseñas no coinciden" |
+| `password_nuevo` < 8 chars | 400 "La contraseña debe tener al menos 8 caracteres" |
+| Éxito | 204 No Content |
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy puro
+
+| Ruta BFF | Método | Proxy Motor |
+|----------|--------|-------------|
+| `/api/usuarios?page=&size=&activo=&q=` | GET | `/v1/usuarios/` |
+| `/api/usuarios` | POST | `/v1/usuarios/` |
+| `/api/usuarios/[id]` | GET | `/v1/usuarios/{id}` |
+| `/api/usuarios/[id]` | PATCH | `/v1/usuarios/{id}` |
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** List + detail
+
+```
+/app/usuarios              ← listado paginado
+/app/usuarios/[usuarioId]  ← detalle con tab de roles
+```
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** Detalle con Subentidades (lista + detalle con tabs)
+**Referencia:** `_devias-kit/components/customer/`
+**Patrón listado:** Lista paginada
+
+### Tipos TypeScript
+
+```typescript
+export interface Usuario {
+  id: string; email: string; nombre: string; activo: boolean
+  created_at: string; updated_at: string
+}
+export interface UsuarioCreatePayload { email: string; password: string; nombre: string }
+export interface UsuarioUpdatePayload { nombre?: string; activo?: boolean }
+export interface UsuarioListParams { page?: number; size?: number; activo?: boolean; q?: string }
+export interface UsuarioListResponse { data: Usuario[]; total: number; page: number; size: number }
+```
+
+Importar tipos RBAC desde `src/components/rbac/rbac.types.ts` (UsuarioRol, UsuarioRolCreatePayload).
+
+### Estructura de archivos ERP
+
+```
+src/
+├── components/usuarios/
+│   ├── usuarios.types.ts
+│   ├── usuarios-view.tsx           ← puedeHacer(), fetch desde /api/usuarios/
+│   ├── usuarios-table.tsx          ← columnas: nombre, email, estado Chip, acciones
+│   ├── usuario-form.tsx            ← campos por modo: crear (email+password+nombre) / editar (nombre+activo)
+│   ├── usuario-crear-modal.tsx
+│   ├── usuario-editar-modal.tsx
+│   ├── usuario-detail-view.tsx     ← detalle con tab de roles
+│   ├── usuario-roles-table.tsx     ← roles asignados + botón quitar
+│   ├── asignar-rol-modal.tsx       ← select módulo → select rol → asignar
+│   └── use-usuarios.ts             ← mutations: createUsuario, updateUsuario + usuario-roles
+├── app/
+│   ├── (private)/app/usuarios/
+│   │   ├── page.tsx
+│   │   └── [usuarioId]/page.tsx
+│   └── api/usuarios/
+│       ├── route.ts                ← GET list + POST create
+│       └── [id]/route.ts           ← GET + PATCH
+```
+
+### Integración batch V0.18 (detalle RBAC)
+
+`src/lib/data/usuarios-server.ts` debe priorizar `GET /v1/usuarios/{id}/detalle-rbac?empresa_id=...`. Mantener fallback legacy solo para compatibilidad. Si el endpoint batch responde OK, usar exclusivamente su payload.
+
+### Frontera server/client
+
+- `page.tsx` y `[usuarioId]/page.tsx` resuelven datos iniciales server-side
+- `usuario-detail-view.tsx` recibe `initialUsuario`, `initialUsuarioRoles`, `initialModulos`, `initialEmpresaId`, `initialError`
+- Fetch en cliente solo como fallback cuando no hay datos iniciales
+- Mutaciones en cliente (`use-usuarios.ts`): crear, editar, asignar rol, quitar rol
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** CRUD básico
+
+```typescript
+const canCreate = puedeHacer("usuarios", "create")
+const canEdit   = puedeHacer("usuarios", "edit")
+```
+
+Tab Roles: siempre visible (read). Botones asignar/quitar solo si `canEdit`.
+
+---
+
+## Decisiones técnicas
+
+- Email deshabilitado en edición — inmutable post-creación. Campo presente pero `disabled` en editar.
+- Password solo en creación — el form de edición no tiene campo password.
+- Sin DELETE — solo desactivar via `activo: false`. No hay botón eliminar en la UI.
+- 409 email duplicado → error inline en campo `email`: "Este email ya está registrado."
+- Chip activo/inactivo: `activo: true` → Chip `success`. `activo: false` → Chip `default`.
+- Estado local: crear → prepend. Actualizar → reemplazar. Sin remove (no hay delete).
+
+---
+
+## Mejoras posibles
+
+- Cambiar password desde la UI (endpoint `/cambiar-password` ya existe en Motor)
+- Filtro por nombre/email en la lista (parámetro `q` ya existe en Motor)

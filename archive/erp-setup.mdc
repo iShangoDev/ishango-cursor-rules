@@ -1,0 +1,110 @@
+---
+description: Agente de setup inicial. Levanta Devias Kit Pro v8.1.0 en Vercel sin modificaciones.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Agente Setup — Devias Kit Pro → Vercel
+
+## Objetivo único
+Devias Kit Pro v8.1.0 corriendo en Vercel. Sin modificar ningún archivo del template.
+Cualquier cambio de código queda para agentes posteriores.
+
+## Lo que tenés
+- Repo GitHub creado y vacío
+- Descargable: Devias-Kit-Pro-v8.1.0-Standard-Plus
+- Destino: Vercel
+
+## Pasos en orden — no saltarse ninguno
+
+### 1. Copiar el contenido del descargable al repo
+```bash
+# Descomprimir el zip de Devias en la raíz del repo
+# La estructura debe quedar así en la raíz:
+# /src
+# /public
+# package.json
+# next.config.js (o next.config.mjs)
+# tsconfig.json
+# .env.example (si existe)
+```
+No crear carpeta contenedora — el `package.json` va en la raíz del repo.
+
+### 2. Verificar package.json antes de continuar
+Confirmar que existen estos scripts:
+```json
+"scripts": {
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start"
+}
+```
+
+### 3. Instalar dependencias y verificar build local
+```bash
+npm install
+npm run build
+```
+El build debe pasar sin errores antes de hacer cualquier commit.
+Si hay errores de build — resolverlos antes de continuar. No commitear un repo que no buildea.
+
+### 4. Crear .env.local para desarrollo
+Devias usa estas variables en su auth mock — copiar desde `.env.example` si existe:
+```
+NEXTAUTH_SECRET=cualquier-string-random-para-dev
+NEXTAUTH_URL=http://localhost:3000
+```
+`.env.local` va en `.gitignore` — nunca se commitea.
+
+### 5. Commit inicial
+```bash
+git add .
+git commit -m "feat: initial Devias Kit Pro v8.1.0 setup"
+git push origin main
+```
+
+### 6. Configurar Vercel
+Conectar el repo en vercel.com → Import Project.
+
+**Configuración en Vercel dashboard:**
+- Framework Preset: Next.js (detecta automático)
+- Root Directory: `.` (raíz)
+- Build Command: `npm run build` (default)
+- Output Directory: `.next` (default)
+- Install Command: `npm install` (default)
+
+**Variables de entorno en Vercel** (Settings → Environment Variables):
+```
+NEXTAUTH_SECRET    → string random seguro (distinto al de dev)
+NEXTAUTH_URL       → https://tu-dominio.vercel.app
+```
+Aplicar a: Production + Preview + Development
+
+### 7. Deploy
+Hacer push a `main` o triggear deploy manual desde Vercel dashboard.
+Verificar que el build en Vercel pase sin errores en los logs.
+
+## Criterio de éxito
+- `npm run build` pasa localmente sin errores
+- Deploy en Vercel termina en verde
+- La URL de Vercel abre Devias funcionando
+- Login con las credenciales mock de Devias funciona
+
+## Credenciales mock de Devias (para verificar)
+Email: `demo@devias.io`
+Password: `Password123!`
+
+## Lo que NO hace este agente
+- No modifica ningún archivo de Devias
+- No reemplaza el auth
+- No limpia páginas demo
+- No conecta al Motor iShango
+- No crea módulos
+
+Todo eso es trabajo de agentes posteriores definidos en el fundacional.
+
+## Si el build falla
+Causas comunes en Devias v8:
+- Falta variable de entorno → agregar al `.env.local` y a Vercel
+- Versión de Node incompatible → Vercel usa Node 18 por default, Devias v8 requiere 18+
+- Peer dependency conflict → usar `npm install --legacy-peer-deps`

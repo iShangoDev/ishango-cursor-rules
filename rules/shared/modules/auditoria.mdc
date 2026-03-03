@@ -1,0 +1,29 @@
+---
+description: Módulo Auditoría ERP — vistas y contratos de consulta histórica
+globs: ["src/components/auditoria/**/*.tsx", "src/components/auditoria/**/*.ts", "src/app/(private)/app/auditoria/**/*.tsx", "src/app/api/auditoria/**/*.ts"]
+---
+
+# Módulo Auditoría — iShangoERP
+
+## Modelo extendido
+- Modelo Devias principal: Jobs Activity Timeline
+- Referencia principal: `src/components/dashboard/jobs/activity-item.tsx`
+- Referencia secundaria: `src/components/dashboard/settings/login-history.tsx`
+- **Patrón listado:** Lista simple
+
+## Patrón UI
+- Timeline de eventos + tabla de histórico filtrable.
+- Vista solo lectura.
+
+## Flujo obligatorio
+`Motor -> /api/auditoria -> page.tsx -> auditoria-view.tsx`.
+
+## Permisos
+`puedeHacer()` solo en `auditoria-view.tsx`.
+
+---
+
+## Motor — No implementado
+
+> Este módulo no tiene componente propio en iShangoMotor todavía.
+> Si se agrega, documentar aquí: tabla audit_log, schema, endpoints `/v1/auditoria/`.

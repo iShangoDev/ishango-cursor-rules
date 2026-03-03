@@ -1,0 +1,219 @@
+---
+description: Agente Global ERP — aplica a todos los archivos .tsx y .ts del repo iShangoERP
+globs: ["**/*.tsx", "**/*.ts"]
+alwaysApply: true
+---
+
+# iShango ERP — Reglas Globales
+
+## Fuente de verdad
+
+**`.cursor/rules/`** es la fuente de verdad del proyecto. `docs/` es información extra. Si hay conflicto, prevalece .cursor.
+
+## Proyecto
+- Repo: iShangoDev/iShangoERP
+- Stack: Next.js 15 App Router, Devias Kit Pro Plus, MUI v6, TypeScript estricto, Zod
+- Forms: React Hook Form + Zod
+- Deploy: Vercel — https://i-shango-erp.vercel.app/
+- Motor (externo): iShangoDev/iShangoMotor en Digital Ocean
+
+## Modelo de despliegue — crítico
+- Este sistema NO es multi-tenant
+- Una empresa = un ecosistema completo (Motor + ERP + DB)
+- Este repo se despliega UNA VEZ para iShango
+- Los "módulos" son funcionalidades del ERP para esta empresa — no tenants
+
+## Dependencia Motor
+- El Motor es un servicio externo — este repo NO lo contiene
+- **Motor es la UNICA fuente** de creditos, personas, cuotas, pagos. Odoo/FastAPI migraron a Motor.
+- `MOTOR_URL` en `.env.local` apunta al Motor (159.89.89.130:8001 en prod)
+- `{modulo}.types.ts` es el espejo MANUAL del Swagger del Motor
+- Motor caído → ERP muestra "Sistema no disponible", no reintenta indefinidamente
+- Usar Zod para validar respuestas del BFF — errores rápidos y controlados
+- `{modulo}.types.ts` es el PRIMER archivo que se actualiza ante un Breaking change del Motor
+
+## Variables de entorno (.env.example)
+```
+MOTOR_URL=http://localhost:8000
+NEXTAUTH_SECRET=your-nextauth-secret
+ENVIRONMENT=local
+NEXT_PUBLIC_EMPRESA_NOMBRE=iShango
+```
+- `MOTOR_URL`: server-side only — el browser NUNCA la recibe
+- `NEXT_PUBLIC_*`: solo para datos no sensibles
+
+## Estructura de módulo — obligatoria
+```
+(private)/app/{modulo}/
+  page.tsx                      ← Server Component
+components/{modulo}/
+  {modulo}-view.tsx             ← Client Component principal
+  {modulo}-table.tsx
+  {modulo}-form.tsx
+  {modulo}-{accion}-modal.tsx
+  {modulo}.types.ts
+  use-{modulo}.ts               ← mutations al BFF
+app/api/{modulo}/               ← BFF proxy al Motor
+```
+
+## Crear módulo nuevo — OBLIGATORIO
+
+**Antes de crear un módulo:** seguir el proceso en `erp-crear-modulo.mdc`. SE DEBE respetar. No saltar pasos.
+
+1. Consultar **`erp-devia-models.mdc`** (diccionario) — elegir modelo (CRUD Lista Simple, Detalle Subentidades, etc.)
+2. Ver el modelo en vivo en **`/app/modelos`**
+3. Extender desde el **modelo elegido** (components/dashboard/customer/, order/, etc.) — NO copiar _template
+4. Documentar en `modules/{modulo}.mdc` el modelo extendido
+
+**Regla:** `erp-crear-modulo.mdc` — proceso completo obligatorio. Template NO se usa para crear módulos.
+
+## Flujo de datos — NUNCA saltarse capas
+```
+Motor → BFF /api/{modulo} → page.tsx (Server) → {modulo}-view (Client) → componentes hijos
+```
+
+| Capa | Hace | NO hace |
+|------|------|---------|
+| page.tsx | Fetcha BFF, pasa props | Estado, hooks, lógica UI |
+| {modulo}-view | Recibe JSON, maneja estado local | Fetcha directo al Motor |
+| Componentes hijos | Renderizan props | Llaman API, estado global |
+| use-{modulo}.ts | Mutations POST/PATCH/DELETE al BFF | Fetcha GET, estado global |
+
+## Naming — obligatorio
+- Carpetas de módulo: kebab-case singular → `cobranza/`, `personas/`
+- Page: siempre `page.tsx`
+- Vista: `{modulo}-view.tsx` → `cobranza-view.tsx`
+- Tabla: `{modulo}-table.tsx`
+- Form: `{modulo}-form.tsx`
+- Modal: `{modulo}-{accion}-modal.tsx` → `cobranza-crear-modal.tsx`
+- Tipos: `{modulo}.types.ts`
+- Hook: `use-{modulo}.ts`
+- Tipos TS: PascalCase singular → `Deudor`, `Persona`
+- Payload POST: `{Entidad}CreatePayload`
+- Payload PATCH: `{Entidad}UpdatePayload`
+- Props Vista: `{Modulo}ViewProps`
+- Respuesta paginada: `PaginatedResponse<T>`
+- Enum estado: `{Entidad}Estado`
+
+## Permisos en UI — regla estricta
+- `puedeHacer()` se llama ÚNICAMENTE en `{modulo}-view.tsx`
+- Los componentes hijos reciben booleanos: `canCreate`, `canEdit`, `canDelete`
+- Nunca verificar permisos en `page.tsx` ni en componentes hijos
+- Sidebar usa `modulos[]` del AuthContext — renderiza solo módulos habilitados
+
+```typescript
+// CORRECTO — solo en {modulo}-view.tsx
+const { puedeHacer } = useAuth()
+<ModuloTable canCreate={puedeHacer('modulo', 'create')} />
+
+// INCORRECTO — nunca en componentes hijos
+const { puedeHacer } = useAuth() // ❌
+```
+
+## Auth — reglas
+- `motor-auth-context.tsx` centraliza toda la lógica de auth
+- Ningún componente habla directamente con el BFF de auth
+- Cookie: `ishango_session`, httpOnly, SameSite=Lax, Secure en prod
+- Middleware protege `/app/*` y `/api/*` (excepto `/api/auth/login`)
+- ERP nunca decodifica el JWT — el estado de sesión viene del BFF
+
+## Tabla JSON Motor → MUI (decisión de componente)
+| Tipo JSON | Identificador | Modo Vista | Modo Form |
+|-----------|--------------|-----------|----------|
+| string | nombre, descripcion | Typography | TextField |
+| string largo | observaciones, notas | Typography | TextField multiline |
+| string email | email | Typography | TextField type="email" |
+| string teléfono | telefono, celular | Typography | TextField type="tel" |
+| string date | fecha_* | Typography DD/MM/YYYY | DatePicker |
+| string datetime | created_at, updated_at | Typography DD/MM/YYYY HH:mm | Solo lectura |
+| string uuid | id | Referencia interna | NUNCA en form |
+| number entero | cantidad, total | Typography | TextField type="number" |
+| number moneda | deuda, monto, precio | Typography formato $ | TextField mask moneda |
+| number % | tasa, descuento | Typography con % | TextField mask % |
+| boolean | activo, habilitado | Chip Activo/Inactivo | Switch |
+| enum estado | estado | Chip con color | Select opciones del enum |
+| T[] | deudores, cuentas | Table con columnas | No aplica |
+| string[] | etiquetas, tags | Chip por item | Autocomplete multiple |
+| object anidado | direccion, contacto | Sección colapsable | Accordion |
+
+## Campos de sistema — NUNCA en formularios
+```
+CAMPOS_SISTEMA = ['id', 'created_at', 'updated_at', 'deleted_at']
+→ Solo modo vista. Nunca editables.
+```
+
+## Colores Chip de estado
+| Valor | Color MUI |
+|-------|----------|
+| activo | success |
+| inactivo | default |
+| pendiente | info |
+| suspendido | warning |
+| eliminado | error |
+
+## Formatos de datos
+- Moneda: `$ xx,xxx.xx` locale es-AR
+- Porcentaje: `xx.xx%`
+- Fecha: `DD/MM/YYYY`
+- Datetime: `DD/MM/YYYY HH:mm`
+
+## Manejo de errores
+```typescript
+interface ErrorResponse {
+  code: string        // "UNAUTHORIZED", "VALIDATION_ERROR", "NOT_FOUND"
+  message: string     // en español, para el usuario
+  details?: Record<string, string[]>  // por campo, para forms
+}
+```
+| HTTP | UI |
+|------|----|
+| 401 | Redirect login + toast "Sesión expirada" |
+| 403 | Toast "No tenés permisos para esta acción" |
+| 404 | Inline "Registro no encontrado" |
+| 422 | Mensajes inline por campo en el form |
+| 5xx | Toast "Error del servidor. Reintente más tarde" |
+| Motor caído | Inline "Sistema no disponible" |
+
+- Mutations (POST/PATCH/DELETE): toast
+- Fetch inicial (GET en page.tsx): inline en la vista
+- Nunca exponer detalles técnicos del Motor al usuario
+
+## Parámetros de listado (ListParams)
+```typescript
+interface ListParams {
+  page?: number   // default 1
+  size?: number   // default 25, max 100
+  sort?: string   // "created_at" asc, "-nombre" desc
+  // filtros del módulo: estado, fecha_desde, fecha_hasta, etc.
+}
+```
+BFF forwardea estos params al Motor sin transformación. Ver erp-patrones-lista.mdc para cuándo usar listado paginado.
+
+## Acciones de negocio
+```
+Motor:  POST /v1/{modulo}/{id}/{accion}
+BFF:    POST /api/{modulo}/{id}/{accion}  — proxy directo
+ERP:    {modulo}-{accion}-modal.tsx + use-{modulo}.ts
+```
+Las acciones de negocio SIEMPRE devuelven el recurso actualizado completo.
+
+## Estados de carga (Loading)
+- `page.tsx`: Suspense con fallback skeleton
+- `{modulo}-view`: si data es null/loading → Skeleton MUI que imita la estructura
+- Mutations: botón disabled + CircularProgress — no bloquea toda la vista
+- NUNCA spinner genérico en pantalla completa — skeleton por sección
+
+## Caché y revalidación
+- `page.tsx`: `cache: 'no-store'` o `revalidate` explícito — datos frescos por request
+- Tras mutation exitosa: usar el recurso devuelto para actualizar estado local (no GET extra)
+- Cada módulo documenta en su `.mdc` si usa refetch o prepend tras create
+
+## Empty states
+- Lista vacía: "No hay {entidad} aún" + CTA "Crear el primero" si `canCreate === true`
+- Búsqueda sin resultados: "No se encontraron resultados para '{término}'" + "Probá con otros filtros"
+- Texto en español, tono neutro. CTA de crear SOLO si `canCreate` es true.
+
+## Soft delete
+- Listados excluyen `deleted_at != null` por defecto
+- Si el módulo necesita ver eliminados: parámetro `?incluir_eliminados=true`
+- ERP no expone esta opción salvo en vistas de administración explícitas

@@ -1,0 +1,163 @@
+---
+description: Agente Auth ERP — aplica cuando Cursor edita archivos de autenticación, contexto de auth, get-session-server, o fetch del cliente
+globs: ["src/components/auth/**/*.tsx", "src/lib/get-session-server.ts", "src/lib/fetch-client.ts", "src/app/auth/**/*.tsx", "src/app/api/auth/**/*.ts", "src/app/layout.tsx"]
+---
+
+# Auth — iShangoERP
+
+## Flujo de autenticación completo
+
+```
+LOGIN:
+1. Usuario → POST /api/auth/login (BFF)
+2. BFF → POST /v1/auth/login (Motor)
+3. Motor → { access_token, refresh_token, user, empresa, modulos }
+4. BFF → Set-Cookie ishango_session (httpOnly, contiene access_token + refresh_token)
+5. BFF → devuelve { user, empresa, modulos } al cliente (sin tokens)
+6. MotorAuthProvider → setUser, setEmpresaActiva, setModulos
+
+NAVEGACIÓN (cada request a ruta privada):
+1. Browser envía cookie ishango_session automáticamente
+2. Middleware verifica que cookie existe → permite acceso
+3. src/app/layout.tsx (root, Server Component async) → getSessionServer()
+   → lee cookie → llama Motor GET /v1/auth/me
+   → pasa initialSession al MotorAuthProvider
+4. MotorAuthProvider arranca con user/empresa/modulos populados
+5. puedeHacer() funciona desde el primer render
+```
+
+## Capas de auth
+
+| Capa | Dónde | Qué hace |
+|------|-------|----------|
+| Middleware | `src/middleware.ts` | Protege rutas — redirige si no hay cookie |
+| `getSessionServer` | Server Component | Lee cookie → obtiene sesión del Motor |
+| MotorAuthProvider | Client Component | Distribuye sesión a toda la app via Context |
+| `fetchWithAuthGuard` | Client — hooks/handlers | Intercepta 401 → redirect login |
+
+## getSessionServer — reglas críticas
+
+```typescript
+// src/lib/get-session-server.ts
+// ❌ NUNCA importar en Client Components
+// ✅ SOLO en layout.tsx (root) y otros Server Components
+
+// Usa getMotorUrl() — MOTOR_URL
+// Llama Motor DIRECTO — no al BFF
+// BFF es para el cliente. Server-to-server va directo al Motor.
+
+// next.revalidate 300 — cache 5 min por usuario (Authorization en cache key)
+const res = await fetch(`${motorUrl}/v1/auth/me`, {
+  headers: { Authorization: `Bearer ${access_token}` },
+  next: { revalidate: 300 },
+});
+```
+
+## MotorAuthProvider — prop initialSession
+
+```typescript
+// motor-auth-context.tsx
+
+interface MotorAuthProviderProps {
+  children: ReactNode;
+  initialSession?: SessionData | null;
+}
+
+// Si initialSession llega → arrancar con datos, sin fetch de refresh
+const [user, setUser] = useState(initialSession?.user ?? null);
+const [empresaActiva, setEmpresaActiva] = useState(initialSession?.empresa ?? null);
+const [modulos, setModulos] = useState(initialSession?.modulos ?? []);
+const [isLoading, setIsLoading] = useState(!initialSession);
+
+useEffect(() => {
+  if (initialSession) return; // ← skip — ya tenemos sesión del servidor
+  hydrateSession();            // ← solo fallback si initialSession es null
+}, []);
+```
+
+## BFF — contratos
+
+| Ruta BFF | Método | Proxy Motor |
+|----------|--------|-------------|
+| `/api/auth/login` | POST | `POST /v1/auth/login` |
+| `/api/auth/refresh` | POST | `POST /v1/auth/refresh` |
+| `/api/auth/logout` | POST | `POST /v1/auth/logout` |
+
+## Cookie ishango_session
+
+```typescript
+// httpOnly — el cliente nunca ve el token
+// Contiene: { access_token, refresh_token }
+// Set en: /api/auth/login/route.ts, /api/auth/refresh/route.ts, motor-fetch.ts (tryRefresh)
+// Leída en: motor-fetch.ts (BFF server-side), getSessionServer (layout server), getSessionUserId (BFF perfil)
+// Validada en: middleware.ts (motorMiddleware)
+// user_id: obtenido del payload JWT (getSessionUserId decodifica access_token)
+```
+
+## Interceptor global 401 — fetchWithAuthGuard
+
+```typescript
+// src/lib/fetch-client.ts
+// Usar en TODOS los fetch del lado cliente (hooks, event handlers)
+// No usar en motor-fetch.ts (server-side)
+
+export async function fetchWithAuthGuard(input, init?) {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    await fetch("/api/auth/logout", { method: "POST" });
+    globalThis.location.href = "/auth/login?reason=session_expired";
+    throw new Error("SESSION_EXPIRED");
+  }
+  return res;
+}
+```
+
+## Página de login — mensaje sesión expirada
+
+```typescript
+const reason = searchParams.get("reason");
+
+{reason === "session_expired" && (
+  <Alert severity="warning" sx={{ mb: 2 }}>
+    Tu sesión expiró. Por favor iniciá sesión nuevamente.
+  </Alert>
+)}
+```
+
+## puedeHacer — regla de uso
+
+```typescript
+// SOLO en {modulo}-view.tsx — nunca en componentes hijos
+const canCreate = puedeHacer("usuarios", "create");
+const canEdit   = puedeHacer("usuarios", "edit");
+
+// Los hijos reciben booleanos como props
+<UsuariosTable canEdit={canEdit} />
+<UsuarioCrearModal canCreate={canCreate} />
+```
+
+Desde V0.7, `puedeHacer()` funciona desde el primer render gracias a la pre-hidratación. No hay flickering de botones ni sidebar.
+
+## Variable de entorno requerida (server-side)
+
+```bash
+MOTOR_URL=http://{IP_DROPLET}:8001
+# Sin NEXT_PUBLIC_ — solo server-side
+# En Vercel dashboard → Settings → Environment Variables
+```
+
+## Motor — endpoint requerido
+
+El Motor debe exponer `GET /v1/auth/me` con header `Authorization: Bearer {access_token}`.
+Respuesta: `{ user: { id, nombre, email }, empresa: { id, nombre }, modulos: [{ nombre, permisos }] }`.
+
+Si no existe, la pre-hidratación falla y el fallback usa `/api/auth/refresh`.
+
+## Páginas de error
+
+| Archivo | Cuándo |
+|---------|--------|
+| `src/app/error.tsx` | Error de runtime global |
+| `src/app/(private)/app/error.tsx` | Error dentro del área autenticada |
+| `src/app/(private)/app/not-found.tsx` | Ruta inexistente en área privada |
+| `src/app/errors/not-authorized/page.tsx` | Acceso denegado (ya existe) |
