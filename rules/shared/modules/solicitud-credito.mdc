@@ -148,15 +148,15 @@ No hay `canCreate`, `canEdit`, `canDelete` — el módulo es solo lectura + acci
 
 ## Mejoras posibles
 
-- Modal "Convertir a crédito" (cuando Motor exponga POST convertir) — llamar a `/api/solicitud-credito/[id]/convertir`.
+- Modal "Convertir a crédito" en ERP — llamar a `/api/solicitud-credito/[id]/convertir` (Motor ya expone POST convertir).
 - Estado badge específico para solicitudes (EvaluationStatusBadge de Credinter) si se requiere.
-- Filtro `estado` en listado si el Motor lo soporta.
+- Filtro `estado` en listado.
 
 ---
 
-## Pendiente en Motor
+## Motor — V0.32 implementado
 
-- **V0.32** — Tabla `solicitudes_credito`, API `/v1/solicitud-credito/` (list, detail, convertir), sync Credinter escribiendo en solicitudes_credito, RBAC módulo `solicitud_credito`. Ver `docs/solicitud-implementacion/V0.32-solicitud-credito-modulo-independiente.md` (ERP) y `docs/solicitud-implementacion-erp/V0.32-Plan-Implementacion-ERP.md` (Motor).
+Tabla `solicitudes_credito`, API `/v1/solicitud-credito/` (list, detail, convertir), sync Credinter escribiendo en solicitudes_credito, RBAC módulo `solicitud_credito`. Referencia: `docs/solicitud-implementacion/V0.32-solicitud-credito-modulo-independiente.md` (ERP), `docs/solicitud-implementacion-erp/V0.32-Plan-Implementacion-ERP.md` (Motor).
 
 ---
 

@@ -85,7 +85,7 @@ Además del plan en ERP `docs/solicitud-implementacion/V{X.Y}.md`, **debe existi
 
 ### Lista de pedidos abiertos
 
-- **ERP** mantiene en `docs/solicitud-implementacion/README.md` la tabla "Requests ERP al Motor — pendientes" (ej. V0.32 hasta que Motor lo implemente).
+- **ERP** mantiene en `docs/solicitud-implementacion/README.md` la tabla "Requests ERP al Motor — pendientes". V0.32 (solicitud-credito) implementado en Motor.
 - **Motor** mantiene en `docs/solicitud-implementacion-erp/README.md` la tabla de planes pendientes (mismo V{X.Y} que ERP cuando el pedido viene de ERP).
 
 ### Sincronización tras cambios cross-repo
