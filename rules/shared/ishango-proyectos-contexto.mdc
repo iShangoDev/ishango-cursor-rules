@@ -82,4 +82,6 @@ Motor (API) → BFF /api/* → page.tsx (Server) → {modulo}-view (Client) → 
 
 El `.cursor` es **idéntico** en ambos repos. No es "reglas del ERP" ni "reglas del Motor" — es el conocimiento del sistema iShango completo. Esto permite que desde cualquier proyecto, Cursor conozca ambas caras del sistema y pueda facilitar cambios en ERP y Motor con las mismas reglas y el mismo vocabulario.
 
+**Fuente de verdad:** el repo `ishango-cursor-rules` (`C:\dev\ishango-cursor-rules`) centraliza todo el contenido. Los archivos `.cursor/rules/` en ERP y Motor son outputs del script `sync-cursor.ps1`. No editarlos directo — siempre editar en `ishango-cursor-rules` y sincronizar.
+
 Ver `ishango-dimensiones.mdc` para la arquitectura completa de dimensiones de módulo.

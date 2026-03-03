@@ -8,7 +8,11 @@ alwaysApply: false
 
 ## Principio
 
-**`.cursor/rules/` es la fuente de verdad.** Las reglas son la autoridad. docs/ alimenta las reglas pero si hay conflicto prevalece .cursor. Este archivo define el mapeo docs→reglas.
+**`ishango-cursor-rules` es la fuente de verdad del `.cursor`.** Los archivos en `.cursor/rules/` son outputs del sync — no se editan directamente. Editar en `C:\dev\ishango-cursor-rules` y correr `.\sync-cursor.ps1` para distribuir a ERP y Motor.
+
+Repo: https://github.com/iShangoDev/ishango-cursor-rules
+
+Si hay conflicto entre docs/ y `.cursor/rules/`, prevalece `.cursor/rules/`.
 
 ## Mapeo docs → reglas
 

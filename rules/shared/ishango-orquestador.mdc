@@ -305,6 +305,30 @@ Pasar `canCreate`, `canEdit`, `canDelete` a hijos.
 
 ---
 
+## Workflow — Actualizar .mdc de módulo
+
+Los archivos `.cursor/rules/` en ERP y Motor son **outputs** del repo `ishango-cursor-rules`.
+No editar directamente en ERP ni en Motor.
+
+```powershell
+# 1. Editar el .mdc en ishango-cursor-rules
+#    - Módulo nuevo/normalizado: rules/shared/modules/{modulo}.mdc
+#    - Regla compartida: rules/shared/ishango-*.mdc
+#    - Regla solo ERP: rules/erp/erp-*.mdc
+#    - Regla solo Motor: rules/motor/
+
+# 2. Sincronizar a ERP y Motor
+cd C:\dev\ishango-cursor-rules
+.\sync-cursor.ps1
+
+# 3. Commitear
+git add . ; git commit -m "descripcion del cambio" ; git push
+```
+
+Repo: https://github.com/iShangoDev/ishango-cursor-rules
+
+---
+
 ## Workflow — Deploy y push
 
 ### ERP (Vercel)

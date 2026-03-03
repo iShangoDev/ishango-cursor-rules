@@ -36,3 +36,15 @@ La carpeta `docs/` contiene documentación complementaria (planes, resultados, c
 ## Regla
 
 Todo lo que afecte al workflow, al proceso de modelado o a las convenciones de código debe estar en `.cursor/rules/`. Los docs pueden ampliar o historiar, pero la autoridad es .cursor.
+
+## Origen del .cursor
+
+Los archivos en `.cursor/rules/` son **outputs** del repo `ishango-cursor-rules` (`C:\dev\ishango-cursor-rules`).
+**No editarlos directamente aquí.** Editar en `ishango-cursor-rules` y correr `.\sync-cursor.ps1`.
+
+| Tipo | Editar en |
+|------|-----------|
+| Módulos (.mdc) | `rules/shared/modules/{modulo}.mdc` |
+| Reglas compartidas (ishango-*) | `rules/shared/` |
+| Reglas ERP (erp-*) | `rules/erp/` |
+| Reglas Motor | `rules/motor/` |
