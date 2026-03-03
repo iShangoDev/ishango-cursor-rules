@@ -1,0 +1,198 @@
+---
+description: Agente Módulo InfoExperto — aplica cuando Cursor edita archivos del módulo infoexperto en Motor (reportes y evaluación crediticia)
+globs: [
+  "app/modules/infoexperto/**/*.py"
+]
+---
+
+# Módulo InfoExperto — iShango Motor
+
+Reportes y evaluación crediticia vía proveedor InfoExperto. Consumido por Credinter (POST /evaluate con Bearer) y por usuarios con permiso read/create. No hay UI en ERP; consumo directo al Motor.
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Recibe** — datos del proveedor externo InfoExperto (obtenerInformeDni)
+- **Crea** — reportes (POST /reports) y evaluación crediticia (POST /evaluate)
+- **Lee** — listados (my-reports, todos paginados), detalle completo, resumen sin report_data
+- No Modifica ni Elimina registros
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Tabla única
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `infoexperto_reports` | Reporte por DNI: estado, datos extraídos, JSON crudo del informe | `usuario_id` opcional → `usuarios.id` |
+
+### Modelo SQLModel
+
+```python
+class ReportStatus(str, Enum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    HOMONIMOS = "HOMONIMOS"
+
+class InfoexpertoReport(SQLModel, table=True):
+    __tablename__ = "infoexperto_reports"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    usuario_id: uuid.UUID | None = Field(default=None, foreign_key="usuarios.id", index=True, nullable=True)
+    dni: str = Field(max_length=20, index=True)
+    tipo: str = Field(max_length=20, default="normal")
+    sexo: str | None = Field(default=None, max_length=1, nullable=True)
+    status: ReportStatus = Field(default=ReportStatus.PENDING, index=True, ...)
+    error_message: str | None = Field(default=None, nullable=True)
+    report_data: dict[str, Any] | None = Field(default=None, sa_type=JSON, nullable=True)
+    cuit: str | None = Field(default=None, max_length=20, nullable=True)
+    nombre_completo: str | None = Field(default=None, max_length=300, nullable=True)
+    actividad: str | None = Field(default=None, max_length=200, nullable=True)
+    categoria_monotributo: str | None = Field(default=None, max_length=10, nullable=True)
+    scoring: int | None = Field(default=None, nullable=True)
+    scoring_detalle: str | None = Field(default=None, max_length=50, nullable=True)
+    nivel_socioeconomico: str | None = Field(default=None, max_length=10, nullable=True)
+    empleador: str | None = Field(default=None, max_length=5, nullable=True)
+    informe_id: int | None = Field(default=None, nullable=True)
+    fecha_informe: date | None = Field(default=None, nullable=True)
+    cantidad_domicilios: int = Field(default=0)
+    cantidad_rodados: int = Field(default=0)
+    cantidad_personas_relacionadas: int = Field(default=0)
+    cantidad_empresas: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+```
+
+### Schemas
+
+- **InfoexpertoReportCreate:** `dni`, `tipo` (default "normal"), `sexo` (Literal["M","F"] | None). Validador: DNI 7–8 dígitos.
+- **SimpleDniEvaluate:** `dni` (mismo validador). Entrada de POST /evaluate.
+- **InfoexpertoReportRead:** Resumen sin report_data (id, dni, status, cuit, nombre_completo, actividad, scoring, etc., created_at).
+- **InfoexpertoReportReadFull:** Hereda Read + `report_data`.
+- **ApprovalResponseData:** Respuesta de evaluate (contrato Credinter): id, dni, status, resultado, cuit, nombreCompleto, scoring, motivoRechazo, createdAt, creditScore, evaluationDetails (camelCase).
+
+### Migración
+
+```
+migrations/versions/20260303_021_add_infoexperto_reports_table.py
+```
+
+Índices: `ix_infoexperto_reports_dni`, `ix_infoexperto_reports_cuit`, `ix_infoexperto_reports_status`, `ix_infoexperto_reports_usuario_id`, `ix_infoexperto_reports_created_at`, GIN en `report_data`.
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD parcial + acción de negocio (evaluate)
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| POST | `/v1/infoexperto/reports` | Crear reporte (consulta InfoExperto, persiste) | create |
+| GET | `/v1/infoexperto/reports/my-reports` | Lista reportes del usuario actual | read |
+| GET | `/v1/infoexperto/reports/{report_id}` | Detalle completo (incluye report_data) | read |
+| GET | `/v1/infoexperto/reports/{report_id}/summary` | Resumen (sin report_data) | read |
+| GET | `/v1/infoexperto/reports` | Listado paginado de todos los reportes | read |
+| POST | `/v1/infoexperto/evaluate` | Evalúa DNI (reporte + evaluación crediticia, contrato Credinter) | create |
+
+### ListParams soportados
+
+```
+GET /v1/infoexperto/reports?page=1&size=25
+```
+
+Sin filtros adicionales en el router actual. Respuesta: `{ data, total, page, size }`.
+
+### Registro en main.py
+
+```python
+from app.modules.infoexperto.router import router as infoexperto_router
+app.include_router(infoexperto_router, prefix="/v1")
+# router = APIRouter(prefix="/infoexperto", tags=["Infoexperto"])
+```
+
+---
+
+## Motor — Reglas de negocio
+
+1. Sin `INFOEXPERTO_API_KEY` configurada → ValueError; router devuelve **503** "Servicio de informes no configurado".
+2. Reutilización: mismo DNI en las últimas 24 h (completado) → devolver reporte existente, no nueva llamada al proveedor.
+3. Estados: PENDING → COMPLETED | FAILED | HOMONIMOS según respuesta del proveedor (homónimos si mensaje o multiple_persons/homonimos).
+4. Detalle y summary: solo si el reporte es propio (`report.usuario_id == current_user`) o `usuario_id` es null; si es de otro usuario → **403** "Sin permisos para ver este reporte".
+5. Evaluate: crea reporte (reutilizando si aplica) + evaluación crediticia (`evaluate_credit` en credit_evaluator.py); respuesta en formato Credinter (camelCase: resultado, motivoRechazo, evaluationDetails).
+6. Límite 429 del proveedor → **429** con mensaje; error autenticación proveedor → **502** "Error con proveedor de informes"; otros ValueError → **400**.
+7. Todos los endpoints requieren JWT válido y permiso `read` o `create` según tabla.
+8. DNI en Create y Evaluate: 7–8 dígitos (se normaliza a dígitos).
+
+### Archivos del módulo Motor
+
+```
+app/modules/infoexperto/
+├── __init__.py
+├── model.py           # InfoexpertoReport, ReportStatus
+├── schema.py          # Create, Read, ReadFull, SimpleDniEvaluate, ApprovalResponseData, EvaluationDetails...
+├── repository.py      # InfoexpertoReportRepository
+├── service.py         # InfoexpertoService, _call_infoexperto_api, _extract_report_data
+├── credit_evaluator.py # evaluate_credit (reglas de aprobación/rechazo)
+└── router.py          # Endpoints — prefix="/infoexperto"
+```
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** No implementado
+
+Consumo actual: Credinter (Bearer JWT) y scripts. Ver `docs/infoexperto/INSTRUCCION-CREDINTER-EVALUATE.md`. Si se agrega UI en ERP: proxy a Motor (GET/POST infoexperto) y documentar aquí.
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** No implementado
+
+Si se agrega UI: por ejemplo `/app/infoexperto` (listado) y `/app/infoexperto/[id]` (detalle).
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Patrón:** No implementado
+
+Si se agrega: listado de reportes (paginado), detalle con report_data opcional, posible formulario "Evaluar DNI" que llame a POST /evaluate.
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** Solo read + create (sin edit ni delete)
+
+- `require_permission("infoexperto", "read")` — listados, detalle, summary.
+- `require_permission("infoexperto", "create")` — POST /reports, POST /evaluate.
+- Módulo y rol: migración 022 (`admin_infoexperto`, permisos read + create). Usuario de servicio para Credinter: migración 023 (`infoexperto-servicio@ishango.com`).
+
+En ERP, cuando exista UI: `puedeHacer('infoexperto', 'create')`, `puedeHacer('infoexperto', 'read')`.
+
+---
+
+## Decisiones técnicas
+
+- Evaluate es acción separada (contrato Credinter); respuesta con camelCase y estructura fija.
+- `report_data` JSON persistido para auditoría y re-evaluación sin nueva llamada al proveedor.
+- Reutilización por DNI en ventana 24 h para evitar consumo innecesario del proveedor.
+- Evaluación crediticia (aprobado/no aprobado, motivos) en `credit_evaluator.py`; el servicio orquesta reporte + evaluación.
+
+---
+
+## Mejoras posibles
+
+- Filtros por status y/o fecha en GET /reports.
+- Parámetro opcional `?include=report_data` en listado para evitar GET por id cuando se necesite el JSON.
+- Documentar rate limit del proveedor y comportamiento 429 en docs/ y en el .mdc.
+
+---
+
+## Pendiente en el otro repo
+
+- **Pendiente en ERP:** UI de consulta de reportes (listado/detalle) y/o pantalla "Evaluar DNI" si se requiere. Ver `docs/infoexperto/` y contrato evaluate en Motor.

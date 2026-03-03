@@ -51,6 +51,7 @@ Cuando Cursor detecta archivos de un módulo, activa el .mdc correspondiente:
 | `*/numeradores/**` | `.cursor/rules/modules/numeradores.mdc` |
 | `*/perfil/**` | `.cursor/rules/modules/perfil.mdc` |
 | `*/configuracion/**` | `.cursor/rules/modules/configuracion.mdc` |
+| `*/infoexperto/**` | `.cursor/rules/modules/infoexperto.mdc` |
 
 Cada .mdc cubre **ambas caras** (Motor + ERP) del módulo.
 
