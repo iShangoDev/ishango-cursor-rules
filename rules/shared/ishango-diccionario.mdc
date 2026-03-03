@@ -32,6 +32,7 @@ Definiciones canónicas del sistema. Nadie inventa términos fuera de este glosa
 | **Mente única** | Principio arquitectónico: el `.cursor` es idéntico en ERP y Motor. No hay reglas por proyecto, hay reglas del sistema. |
 | **Fuente de verdad** | Para `.cursor`: el contenido idéntico en ambos repos. Para datos de negocio: el Motor. |
 | **Soft delete** | Eliminación lógica. Setea `deleted_at`, nunca elimina el registro físicamente de la DB. |
+| **Propósito del .cursor** | Desarrollar el ERP y el Motor. Las reglas guían la implementación de código. La IA implementa (escribe, edita, crea archivos) en modo Agent. La documentación es medio para el desarrollo, no el fin. |
 
 ---
 

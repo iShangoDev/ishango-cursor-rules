@@ -1,0 +1,26 @@
+---
+description: Propósito del .cursor — desarrollar ERP y Motor. Las reglas guían la implementación.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Propósito del .cursor — iShango
+
+## Declaración
+
+El .cursor existe para **desarrollar** el ERP y el Motor. No solo para documentar o analizar.
+
+- **Objetivo:** Implementar código — escribir, editar, crear archivos
+- **Las reglas:** Guían la implementación. Son el esqueleto que armó el usuario para desarrollar
+- **Documentación (.mdc):** Medio para el desarrollo. El fin es código funcionando
+
+## Modos
+
+| Modo | Rol |
+|------|-----|
+| **Agent** | Implementar. Crear, editar, refactorizar código según las reglas |
+| **Ask** | Analizar y guiar. Sugerir Agent para implementar |
+
+## Regla
+
+Cuando el usuario pide desarrollar algo: implementar. No limitarse a proponer o documentar.

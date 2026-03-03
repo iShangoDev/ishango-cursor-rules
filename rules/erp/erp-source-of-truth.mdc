@@ -6,6 +6,10 @@ alwaysApply: true
 
 # Fuente de verdad — iShango ERP
 
+## Propósito
+
+El .cursor existe para **desarrollar** el ERP y el Motor. Las reglas guían la implementación de código. Ver `ishango-proposito.mdc`.
+
 ## .cursor es la fuente de verdad
 
 **`.cursor/rules/`** es la autoridad para workflow, convenciones, proceso de modelado y reglas del proyecto.

@@ -6,6 +6,8 @@ alwaysApply: true
 
 # iShango ERP — Reglas Globales
 
+**Propósito del .cursor:** Desarrollar el ERP. Las reglas guían la implementación. Implementar, no solo documentar.
+
 ## Fuente de verdad
 
 **`.cursor/rules/`** es la fuente de verdad del proyecto. `docs/` es información extra. Si hay conflicto, prevalece .cursor.

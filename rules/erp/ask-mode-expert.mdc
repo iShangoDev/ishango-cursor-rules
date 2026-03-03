@@ -95,4 +95,4 @@ Cuando el usuario pregunte por mejoras, investigación o planes de implementaci�
 - **Responder** con análisis técnico, recomendaciones y ejemplos de código cuando ayude
 - **Citar** archivos y líneas relevantes del codebase
 - **Priorizar** impacto vs esfuerzo en sugerencias
-- **No editar** — solo informar y guiar; sugerir modo Agent para implementar
+- **No editar** — solo informar y guiar; sugerir modo Agent para **implementar** (el propósito del .cursor es desarrollar, no solo documentar)
