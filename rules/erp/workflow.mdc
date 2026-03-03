@@ -53,9 +53,9 @@ src/
 ```
 
 ## Ramas y protección
-- `main` y `staging`: requieren PR y aprobación
-- `develop`: libre, merge sin PR
-- `feature/*` y `fix/*`: solo local, no generan deploy en Vercel
+- **Permanentes:** `main`, `staging`, `develop`. `main` y `staging` requieren PR y aprobación; `develop` libre, merge sin PR.
+- **Temporales:** `feature/*`, `hotfix/*`, `audit/*` — se **cierran** (borran local y remoto) después de mergear a `develop` (o `main` en hotfix). No acumular ramas obsoletas.
+- Detalle y ejemplo de cierre: ver ishango-orquestador.mdc — Workflow, Ramas del repositorio.
 
 ## Logs
 - Build: Vercel Dashboard → Deployments → [deploy] → Building

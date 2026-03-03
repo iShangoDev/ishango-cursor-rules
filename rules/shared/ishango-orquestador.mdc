@@ -474,10 +474,27 @@ npm run validate:ux
 git add . ; git commit -m "feat({modulo}): descripción" ; git push origin develop
 ```
 
-Ramas:
-- `develop` → libre, push directo, genera Preview en Vercel
-- `staging` → requiere PR
-- `main` → requiere PR + aprobación → Production
+### Ramas del repositorio (ERP)
+
+**Ramas permanentes** (siempre existen):
+- `main` → Production (Vercel), requiere PR + aprobación
+- `staging` → Preview, requiere PR
+- `develop` → Preview, push directo; rama de integración diaria
+
+**Ramas temporales** (prefijos; se cierran tras merge):
+- `feature/*` — desarrollo de funcionalidad; merge a `develop`; **cerrar** tras merge
+- `hotfix/*` — corrección urgente; merge a `develop` o `main` según caso; **cerrar** tras merge
+- `audit/*` — auditoría/bisect (ej. `audit/lote-a-*`); **cerrar** cuando termina la actividad
+
+**Regla para el agente:** Tras mergear una rama temporal a `develop` (o `main`), eliminar la rama local y remota para no acumular ramas obsoletas.
+
+Cierre tras merge (ejemplo):
+```powershell
+# Tras merge feature/xyz a develop
+git checkout develop
+git branch -d feature/xyz
+git push origin --delete feature/xyz
+```
 
 Vercel build automático en cada push. Logs en Vercel Dashboard → Deployments.
 
