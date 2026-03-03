@@ -429,6 +429,15 @@ Pasar `canCreate`, `canEdit`, `canDelete` a hijos.
 
 ---
 
+## Pendiente en el otro repo (opcional)
+
+Si el módulo depende de trabajo en el otro repo, listar aquí para que quede visible tras el sync.
+
+- **Pendiente en Motor:** V{X.Y} — descripción breve. Ver `docs/solicitud-implementacion/V{X.Y}-...` (ERP) y `docs/solicitud-implementacion-erp/` (Motor).
+- **Pendiente en ERP:** V{X.Y} — descripción breve. Ver plan con "Request del Motor" en ERP.
+
+---
+
 ## Workflow — Actualizar .mdc de módulo
 
 Los archivos `.cursor/rules/` en ERP y Motor son **outputs** del repo `ishango-cursor-rules`.

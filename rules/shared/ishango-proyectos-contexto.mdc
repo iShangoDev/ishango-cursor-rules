@@ -50,12 +50,30 @@ Motor (API) → BFF /api/* → page.tsx (Server) → {modulo}-view (Client) → 
 
 ---
 
+## Plan de comunicación de pedidos vía .mdc
+
+Los pedidos de cambios entre ERP y Motor se comunican **a través del .mdc compartido** y de los docs de cada repo. Así la comunicación es **bidireccional** y los **repos y locales quedan sincronizados**.
+
+| Principio | Cómo se cumple |
+|-----------|----------------|
+| **Canal compartido** | El `.mdc` del módulo (en ishango-cursor-rules) tiene la sección "Pendiente en el otro repo". Tras `sync-cursor.ps1`, ese contenido llega a ERP y Motor. Cualquier repo ve qué falta del otro lado. |
+| **Bidireccional** | ERP → Motor: plan en `docs/solicitud-implementacion/` (ERP) + espejo en `docs/solicitud-implementacion-erp/` (Motor). Motor → ERP: plan en ERP con encabezado "Request del Motor". |
+| **Repos y locales en sync** | 1) Editar en ishango-cursor-rules. 2) `.\sync-cursor.ps1`. 3) Commit+push en cursor-rules, luego ERP, luego Motor. Los README de solicitudes en cada repo mantienen la lista de pedidos abiertos. |
+
+Al crear o actualizar un pedido cross-repo: actualizar el `.mdc` del módulo (Pendiente en el otro repo), crear o actualizar el plan y el espejo según la dirección, y actualizar los README. Luego ejecutar el orden de sincronización anterior.
+
+---
+
 ## Solicitudes cross-repo
 
 | Dirección | Plan en |
 |-----------|---------|
 | ERP solicita al Motor | `docs/solicitud-implementacion-erp/` (Motor) + `docs/solicitud-implementacion/` (ERP) |
 | Motor solicita al ERP | `docs/solicitud-implementacion/` (ERP) con encabezado "Request del Motor" |
+
+### Regla ERP → Motor
+
+Además del plan en ERP `docs/solicitud-implementacion/V{X.Y}.md`, **debe existir** en Motor `docs/solicitud-implementacion-erp/V{X.Y}-Plan-Implementacion-ERP.md` (copia del alcance Motor o resumen + enlace al plan en ERP). Actualizar `README.md` en **ambos** repos. Así el Motor tiene visible el pedido y no queda solo en ERP.
 
 ### Checklist cuando Motor impacta ERP
 
@@ -64,6 +82,23 @@ Motor (API) → BFF /api/* → page.tsx (Server) → {modulo}-view (Client) → 
 3. [ ] Actualizar `docs/solicitud-implementacion-erp/README.md` en Motor
 4. [ ] Actualizar `docs/solicitud-implementacion/README.md` en ERP
 5. [ ] Si hay cambios en tipos/respuestas: actualizar `{modulo}.types.ts` en ERP
+
+### Lista de pedidos abiertos
+
+- **ERP** mantiene en `docs/solicitud-implementacion/README.md` la tabla "Requests ERP al Motor — pendientes" (ej. V0.32 hasta que Motor lo implemente).
+- **Motor** mantiene en `docs/solicitud-implementacion-erp/README.md` la tabla de planes pendientes (mismo V{X.Y} que ERP cuando el pedido viene de ERP).
+
+### Sincronización tras cambios cross-repo
+
+Después de actualizar .mdc o docs que afectan a ambos lados:
+
+1. Editar en **ishango-cursor-rules** lo que corresponda.
+2. Ejecutar `.\sync-cursor.ps1` en ishango-cursor-rules.
+3. Commit + push **ishango-cursor-rules**.
+4. En **ERP**: commit + push (`.cursor` y `docs` si aplica).
+5. En **Motor**: commit + push (`.cursor` y `docs` si aplica).
+
+Así los tres repos y los locales quedan alineados.
 
 ---
 

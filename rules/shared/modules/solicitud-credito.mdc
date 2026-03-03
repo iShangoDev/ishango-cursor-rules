@@ -4,83 +4,89 @@ globs: [
   "src/components/solicitud-credito/**/*.tsx",
   "src/components/solicitud-credito/**/*.ts",
   "src/app/(private)/app/solicitud-credito/**/*.tsx",
+  "src/app/api/solicitud-credito/**/*.ts",
   "src/lib/data/solicitud-credito-server.ts"
 ]
 ---
 
 # Módulo Solicitud Crédito — iShango Sistema
 
-Vista especializada de créditos con `estado=pending` sincronizados desde Credinter. **No tiene tablas propias en Motor** — es una vista filtrada del módulo créditos. Credinter envía solicitudes concretadas al Motor vía `POST /v1/credinter/solicitud`; el Motor crea crédito en estado `pending` (sin cuotas). El ERP muestra estas solicitudes en `/app/solicitud-credito`.
+Módulo **independiente** de créditos. Tiene **tabla propia** `solicitudes_credito` en Motor. Recibe datos legados de Credinter; el **crédito** se crea cuando el usuario ejecuta la acción "Convertir" desde este módulo.
 
-Ver `docs/investigacion/20260302-solicitud-credito-modulo.md` y `docs/IMPLEMENTACION-HU1-ENVIAR-A-ERP.md`.
+Ver `docs/investigacion/20260302-solicitud-credito-modulo.md`, `docs/IMPLEMENTACION-HU1-ENVIAR-A-ERP.md` y `docs/solicitud-implementacion/V0.32-solicitud-credito-modulo-independiente.md`.
 
 ## Comportamiento declarado (Dimensión 2)
 
 - **Lee** — listado paginado y detalle (solo lectura)
-- **Recibe** — indirectamente: Credinter → Motor (módulo créditos). Este módulo solo consume.
+- **Recibe** — Credinter → Motor (tabla solicitudes_credito). Este módulo consume.
+- **Acción** — "Convertir a crédito" crea el crédito en Motor (tabla creditos + cuotas).
 
 ---
 
 ## Motor — Datos (Dimensión 1)
 
-**Patrón:** Vista filtrada — no tiene tablas propias.
-
-Solicitud crédito = crédito con `estado=pending` en tabla `creditos`. Campos relevantes:
+**Patrón:** Entidad propia — tabla `solicitudes_credito`.
 
 | Campo | Descripción |
 |-------|-------------|
-| `credinter_request_id` | Idempotencia sync Credinter |
+| `id` | UUID |
+| `credinter_request_id` | UNIQUE, idempotencia sync Credinter |
 | `credinter_request_data` | JSON con persona + crédito desde Credinter |
-| `estado` | Siempre `pending` en este módulo |
+| `persona_id` | FK nullable a personas |
+| `nro_credito` | Número de crédito |
+| `monto`, `cantidad_cuotas`, `importe_cuota`, `tasa_mensual` | Datos del préstamo |
+| `producto_credito_id` | nullable |
+| `estado` | pending, convertido, rechazado |
+| `created_at`, `updated_at` | Auditoría |
 
-El Motor almacena en `creditos`. Ver `modules/creditos.mdc` para estructura completa.
+No hay cuotas en esta tabla; se generan al convertir (tabla creditos/cuotas).
 
 ---
 
 ## Motor — API (Dimensión 3)
 
-**Patrón:** Reutiliza endpoints del módulo créditos.
+**Patrón:** Endpoints propios del módulo.
 
-| Método | Ruta | Uso en solicitud-credito |
-|--------|------|--------------------------|
-| GET | `/v1/creditos/?estado=pending&page=1&size=25&nro_credito=...` | Listado |
-| GET | `/v1/creditos/{id}` | Detalle |
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | `/v1/solicitud-credito/` | Listado paginado (page, size, sort, nro_credito, monto, estado) | JWT |
+| GET | `/v1/solicitud-credito/{id}` | Detalle | JWT |
+| POST | `/v1/solicitud-credito/{id}/convertir` | Crea crédito + cuotas, marca solicitud convertida | JWT |
 
-No hay endpoints propios. El sync Credinter (`POST /v1/credinter/solicitud`) pertenece al módulo créditos.
+Sync Credinter: `POST /v1/credinter/solicitud` inserta en `solicitudes_credito` (no en creditos). Ver `modules/credinter_sync.mdc`.
 
 ---
 
 ## Motor — Reglas de negocio
 
-- Las solicitudes son créditos con `estado=pending` y sin cuotas.
-- Las cuotas se generan al concretar la solicitud (acción en módulo créditos).
+- Las solicitudes viven en `solicitudes_credito`; las cuotas solo en `creditos`/`cuotas` tras convertir.
+- Idempotencia sync por `credinter_request_id`.
 - `credinter_request_data` contiene persona + crédito en formato Credinter.
 
 ---
 
 ## ERP — BFF (Dimensión 4)
 
-**Patrón:** Reutiliza BFF de créditos — no tiene ruta propia.
+**Patrón:** Proxy propio — no reutiliza créditos.
 
-- GET `/api/creditos?estado=pending&page=1&size=25&nro_credito=...` → forwardea al Motor
-- GET `/api/creditos/[id]` → detalle (usado en page [id])
+- GET `/api/solicitud-credito?page=1&size=25&nro_credito=...&monto=...` → Motor `GET /v1/solicitud-credito/`
+- GET `/api/solicitud-credito/[id]` → Motor `GET /v1/solicitud-credito/{id}`
+- POST `/api/solicitud-credito/[id]/convertir` → Motor `POST /v1/solicitud-credito/{id}/convertir`
 
-Server-side: `fetchSolicitudCreditoList` en `solicitud-credito-server.ts` llama a `fetchCreditosList({ ...params, estado: "pending" })`.
-
-Client-side: la vista hace fetch a `/api/creditos?estado=pending&...` para paginación y filtros.
+Server-side: `fetchSolicitudCreditoList` y `fetchSolicitudCreditoById` en `solicitud-credito-server.ts` usan `motorFetch` contra `/v1/solicitud-credito/`. Client-side: la vista hace fetch a `/api/solicitud-credito` para paginación y filtros.
 
 ---
 
 ## ERP — Root URL (Dimensión 5)
 
-**Patrón:** List + detail (solo lectura)
+**Patrón:** List + detail (solo lectura) + acción convertir
 
 ```
 /app/solicitud-credito         ← listado paginado
 /app/solicitud-credito/[id]    ← detalle (persona + crédito desde credinter_request_data)
 ```
 
-No hay create, edit ni delete.
+No hay create, edit ni delete. Acción "Convertir a crédito" (modal o botón) cuando Motor exponga POST convertir.
 
 ---
 
@@ -95,22 +101,27 @@ No hay create, edit ni delete.
 ```
 src/
 ├── app/
-│   └── (private)/app/solicitud-credito/
-│       ├── page.tsx                    ← Server Component (lista)
-│       └── [id]/page.tsx               ← Server Component (detalle)
+│   ├── (private)/app/solicitud-credito/
+│   │   ├── page.tsx                    ← Server Component (lista)
+│   │   └── [id]/page.tsx               ← Server Component (detalle)
+│   └── api/solicitud-credito/
+│       ├── route.ts                    ← GET list
+│       └── [id]/
+│           ├── route.ts                ← GET detail
+│           └── convertir/route.ts      ← POST convertir
 ├── lib/data/
-│   └── solicitud-credito-server.ts     ← fetchSolicitudCreditoList (wrapper creditos)
+│   └── solicitud-credito-server.ts     ← fetchSolicitudCreditoList, fetchSolicitudCreditoById
 └── components/solicitud-credito/
-    ├── solicitud-credito-view.tsx      ← Client — estado local, paginación, filtros
-    ├── solicitud-credito-table.tsx     ← Tabla con columnas (Solicitante desde credinter_request_data)
+    ├── solicitud-credito-view.tsx       ← Client — estado local, paginación, filtros
+    ├── solicitud-credito-table.tsx     ← Tabla (Solicitante desde credinter_request_data)
     ├── solicitud-credito-filters.tsx   ← Filtros nro_credito, monto (URL params)
     ├── solicitud-credito-detail-view.tsx ← Detalle persona + crédito (parseCredinterRequestData)
-    └── solicitud-credito.types.ts      ← Credito (reexport) + CredinterRequestData + parseCredinterRequestData
+    └── solicitud-credito.types.ts       ← SolicitudCredito + CredinterRequestData + parseCredinterRequestData
 ```
 
 ### Tipos específicos
 
-- `Credito` — reexportado de `creditos.types`
+- `SolicitudCredito`, `SolicitudCreditoEstado` — espejo del recurso Motor
 - `CredinterRequestData`, `CredinterRequestPersona`, `CredinterRequestCredito`, `CredinterRequestLineaPrestamo` — estructura de `credinter_request_data`
 - `parseCredinterRequestData()` — extrae datos de forma segura
 
@@ -118,40 +129,46 @@ src/
 
 ## Permisos RBAC (Dimensión 7)
 
-**Patrón:** Solo read — usa permisos del módulo créditos.
+**Patrón:** Módulo propio — no depende de créditos.
 
-`filter-nav-by-permissions.ts` mapea `solicitudCredito` → `creditos`. Se requiere `puedeHacer('creditos', 'read')` para ver el ítem en el sidebar.
+`filter-nav-by-permissions.ts` mapea `solicitudCredito` → `solicitud_credito`. Se requiere `puedeHacer('solicitud_credito', 'read')` para ver el ítem en el sidebar. Para la acción "Convertir": `puedeHacer('solicitud_credito', 'convertir')` (solo en solicitud-credito-view o detail-view; pasar `canConvertir` a hijos).
 
-No hay `canCreate`, `canEdit`, `canDelete` — el módulo es solo lectura.
+No hay `canCreate`, `canEdit`, `canDelete` — el módulo es solo lectura + acción convertir.
 
 ---
 
 ## Decisiones técnicas
 
-- **Vista filtrada, no entidad propia:** Evita duplicar tablas. Solicitud crédito = créditos con estado pending.
-- **Reutiliza BFF créditos:** No hay `/api/solicitud-credito`. Menos código, misma fuente de datos.
+- **Entidad propia:** Tabla `solicitudes_credito` en Motor; crédito se crea al convertir.
+- **BFF propio:** `/api/solicitud-credito` — no reutiliza créditos.
 - **credinter_request_data:** JSON flexible; `parseCredinterRequestData` tipa y extrae persona + crédito para la UI.
-- **Server + client fetch:** page.tsx pasa initialData vía `fetchSolicitudCreditoList`; la vista hace client fetch para paginación/filtros (evita full page reload).
+- **Server + client fetch:** page.tsx pasa initialData vía `fetchSolicitudCreditoList`; la vista hace client fetch a `/api/solicitud-credito` para paginación/filtros.
 
 ---
 
 ## Mejoras posibles
 
-- Filtro `monto` en UI existe pero no se envía al BFF (CreditosListParams no lo soporta) — agregar si el Motor lo permite.
-- Modal "Convertir a crédito" (iteración 2) — concretar solicitud y generar cuotas.
+- Modal "Convertir a crédito" (cuando Motor exponga POST convertir) — llamar a `/api/solicitud-credito/[id]/convertir`.
 - Estado badge específico para solicitudes (EvaluationStatusBadge de Credinter) si se requiere.
+- Filtro `estado` en listado si el Motor lo soporta.
+
+---
+
+## Pendiente en Motor
+
+- **V0.32** — Tabla `solicitudes_credito`, API `/v1/solicitud-credito/` (list, detail, convertir), sync Credinter escribiendo en solicitudes_credito, RBAC módulo `solicitud_credito`. Ver `docs/solicitud-implementacion/V0.32-solicitud-credito-modulo-independiente.md` (ERP) y `docs/solicitud-implementacion-erp/V0.32-Plan-Implementacion-ERP.md` (Motor).
 
 ---
 
 ## Workflow — Actualizar .mdc de módulo
 
-Los archivos `.cursor/rules/` en ERP son **outputs** del repo `ishango-cursor-rules`. No editar directamente en ERP.
+Los archivos `.cursor/rules/` en ERP y Motor son **outputs** del repo `ishango-cursor-rules`. Para cambios permanentes, editar allí y sincronizar.
 
 ```powershell
 # 1. Editar el .mdc en ishango-cursor-rules
 #    rules/shared/modules/solicitud-credito.mdc
 
-# 2. Sincronizar a ERP
+# 2. Sincronizar a ERP y Motor
 cd C:\dev\ishango-cursor-rules
 .\sync-cursor.ps1
 
@@ -165,7 +182,7 @@ git add . ; git commit -m "sync: solicitud-credito.mdc" ; git push
 
 | Regla | Contenido |
 |-------|-----------|
-| modules/creditos.mdc | Módulo créditos — tablas, API, BFF |
-| modules/credinter_sync.mdc | Sync Credinter → Motor |
+| modules/creditos.mdc | Módulo créditos — tablas, API, BFF (no recibe solicitudes; convertir es responsabilidad de solicitud-credito) |
+| modules/credinter_sync.mdc | Sync Credinter → Motor (POST persiste en solicitudes_credito) |
 | docs/investigacion/20260302-solicitud-credito-modulo.md | Investigación y arquitectura |
-| docs/IMPLEMENTACION-HU1-ENVIAR-A-ERP.md | Flujo Credinter → ERP |
+| docs/solicitud-implementacion/V0.32-solicitud-credito-modulo-independiente.md | Plan Motor para tabla y API propias |
