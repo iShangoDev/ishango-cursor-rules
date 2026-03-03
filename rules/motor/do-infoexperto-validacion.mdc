@@ -1,0 +1,62 @@
+---
+description: Checklist de validación InfoExperto en Digital Ocean — fuente de verdad
+alwaysApply: false
+---
+
+# Validación InfoExperto en DO
+
+Criterio de **terminado**: Motor en DO con migración 022 aplicada, RBAC infoexperto activo, login con usuario con permiso, endpoint evaluate accesible con JWT y (opcional) 200 cuando INFOEXPERTO_API_KEY está configurada.
+
+**Credenciales en DO:** En el servidor la contraseña del admin puede no ser `admin123`. Usar siempre las credenciales realmente configuradas en el servidor (ej. en `.env.production` o gestionadas por el equipo). No asumir admin123 en DO.
+
+---
+
+## Checklist (ejecutar en el servidor)
+
+### 1. Motor y migración
+
+```bash
+curl -s http://localhost:8001/health
+docker compose -f docker-compose.prod.yml exec motor alembic current
+```
+
+Debe devolver **022** (head).
+
+### 2. Usuario admin y RBAC
+
+```bash
+docker compose -f docker-compose.prod.yml exec postgres psql -U ishango -d ishango_db -c "SELECT id, email FROM usuarios WHERE email = 'admin@ishango.com';"
+```
+
+Debe haber 1 fila. Opcional: comprobar rol infoexperto en `usuario_rol` / `roles`.
+
+### 3. Login
+
+En el servidor, usar la contraseña configurada en DO (no asumir admin123):
+
+```bash
+curl -X POST http://localhost:8001/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@ishango.com","password":"CONTRASEÑA_CONFIGURADA_EN_SERVIDOR"}'
+```
+
+Esperado: 200 y `access_token` en la respuesta.
+
+### 4. Evaluate con JWT
+
+No usar `curl -H "Authorization: Bearer $TOKEN"` desde SSH/Windows (el header no llega bien). Usar script Python en el servidor (ver workflow.mdc — "Probar evaluate en DO") o guardar token en archivo y script .sh.
+
+Esperado al llamar `POST /v1/infoexperto/evaluate` con Bearer válido:
+
+- **200** si INFOEXPERTO_API_KEY está configurada y el proveedor responde.
+- **503** "Servicio de informes no configurado" si falta INFOEXPERTO_API_KEY.
+- Si sale **403** "Not authenticated" suele ser que el header Authorization no llegó (mitigación en workflow.mdc).
+
+### 5. INFOEXPERTO_API_KEY (opcional)
+
+En `.env` del servidor: `INFOEXPERTO_API_KEY` con valor no vacío; reiniciar motor; repetir paso 4. Debe intentar llamada al proveedor (200 o 502 según proveedor).
+
+---
+
+## Referencia
+
+- Workflow y mitigaciones curl/Bearer: `workflow.mdc`
+- Fuente de verdad: `fuente-de-verdad.mdc`

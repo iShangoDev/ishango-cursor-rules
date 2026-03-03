@@ -20,6 +20,7 @@ alwaysApply: true
 | Contexto ERP/Motor cross-repo | `ishango-proyectos-contexto.mdc` |
 | Orquestador + cuestionario creación módulo | `ishango-orquestador.mdc` |
 | Sync Credinter | `modules/credinter_sync.mdc` |
+| Validación InfoExperto en DO | `do-infoexperto-validacion.mdc` |
 | Módulo X (Motor + ERP) | `modules/{modulo}.mdc` |
 
 ## docs/ es información extra

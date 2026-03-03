@@ -71,19 +71,44 @@ docker compose -f docker-compose.prod.yml logs motor --tail 10
 curl http://localhost:8001/health
 ```
 
-## Post-deploy: verificar login (si hay auth/seed)
+## Credenciales en producción (DO)
 
-Tras deploy con migraciones que crean usuario inicial, verificar que existe y el login responde:
+En DO el usuario admin puede tener **contraseña distinta de `admin123`** (ej. cambiada o configurada en `.env.production`). Usar siempre las credenciales configuradas en el servidor (variable o secreto del equipo). No escribir la contraseña real en el repo; sí la referencia a "variable o secreto del servidor". No asumir admin123 en DO.
+
+## Post-deploy: verificar login (credenciales de DO)
+
+Tras deploy con migraciones que crean usuario inicial, verificar que existe y el login responde. Usar **la contraseña configurada en el servidor** (no asumir admin123):
 
 ```bash
 # Usuario en DB
 docker compose -f docker-compose.prod.yml exec postgres psql -U ishango -d ishango_db -c "SELECT id, email FROM usuarios WHERE email = 'admin@ishango.com';"
 
-# Login directo
-curl -X POST http://localhost:8001/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@ishango.com","password":"admin123"}'
+# Login directo (sustituir CONTRASEÑA por la del servidor)
+curl -X POST http://localhost:8001/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@ishango.com","password":"CONTRASEÑA_CONFIGURADA_EN_SERVIDOR"}'
 ```
 
 Si no hay filas → re-ejecutar seed: `alembic downgrade 001` + `alembic upgrade head`. Si el seed falló antes del fix (session.flush), el usuario no se creó.
+
+Checklist completo de validación InfoExperto en DO: `.cursor/rules/do-infoexperto-validacion.mdc`.
+
+## Probar endpoints con Bearer (evitar curl desde SSH/Windows)
+
+No confiar en `curl -H "Authorization: Bearer $TOKEN"` vía SSH desde Windows: la variable y las comillas se interpretan mal y el header no llega → 403 "Not authenticated".
+
+**Alternativas:**
+
+- **(a) Script Python en el servidor** que lea el token de un archivo y envíe el header correctamente (ej. `scripts/test_evaluate_auth.py`: token en `/tmp/token.txt`, script hace POST con `Authorization: Bearer <token>`).
+- **(b) Script .sh en el servidor** que use `TOKEN=$(cat /tmp/token.txt)` y curl en la misma sesión bash (copiar script al servidor, `sed -i 's/\r$//'` si se copió desde Windows, luego `bash script.sh`).
+
+Usar script Python (o .sh con token en archivo) para cualquier endpoint que requiera Bearer cuando se ejecute desde local contra DO.
+
+## Probar evaluate en DO
+
+1. **Obtener token:** en el servidor, login con curl y guardar `access_token` en archivo:
+   ```bash
+   curl -s -X POST http://localhost:8001/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@ishango.com","password":"CONTRASEÑA"}' | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" > /tmp/token.txt
+   ```
+2. **Llamar evaluate:** copiar `scripts/test_evaluate_auth.py` al servidor y ejecutar `python3 /tmp/test_evaluate_auth.py` (el script lee `/tmp/token.txt` y hace POST a `/v1/infoexperto/evaluate` con Bearer). O usar un script .sh en el servidor que lea el token de archivo y llame a curl.
 
 ## Deploy con script (PowerShell local)
 
