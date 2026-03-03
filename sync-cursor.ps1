@@ -1,42 +1,29 @@
 # sync-cursor.ps1
-# Sincroniza el contenido de ishango-cursor-rules a los repos ERP y Motor.
-# Correr cada vez que se modifica cualquier archivo en este repo.
-#
-# Uso:
-#   cd C:\dev\ishango-cursor-rules
-#   .\sync-cursor.ps1
-#
-# Verificar que las rutas coincidan con tu entorno local:
+# Sincroniza ishango-cursor-rules a los repos ERP y Motor.
+# Uso: cd C:\dev\ishango-cursor-rules ; .\sync-cursor.ps1
+
 $erp   = "C:\dev\iShangoERP\.cursor\rules"
 $motor = "C:\dev\ishango-motor\.cursor\rules"
 $here  = $PSScriptRoot
 
-# ---------------------------------------------------------------------------
-# Validaciones previas
-# ---------------------------------------------------------------------------
+# Validaciones
 foreach ($path in @($erp, $motor)) {
     if (-not (Test-Path $path)) {
-        Write-Error "Ruta no encontrada: $path — corregir en sync-cursor.ps1"
+        Write-Error "Ruta no encontrada: $path"
         exit 1
     }
 }
 
-# ---------------------------------------------------------------------------
-# 1. Shared → ERP y Motor
-#    Copia ishango-*.mdc y modules/ a los dos repos.
-# ---------------------------------------------------------------------------
-Write-Host "`n[1/3] Shared → ERP y Motor" -ForegroundColor Cyan
-
+# --- 1. Shared a ERP y Motor ---
+Write-Host "[1/3] Shared -> ERP y Motor" -ForegroundColor Cyan
 $sharedSrc = "$here\rules\shared"
 
-# Archivos raíz de shared (ishango-*.mdc)
 Get-ChildItem "$sharedSrc\*.mdc" | ForEach-Object {
     Copy-Item $_.FullName -Destination $erp   -Force
     Copy-Item $_.FullName -Destination $motor -Force
     Write-Host "  shared: $($_.Name)"
 }
 
-# modules/ — crear carpeta si no existe y copiar todo
 $erpModules   = "$erp\modules"
 $motorModules = "$motor\modules"
 New-Item -ItemType Directory -Path $erpModules   -Force | Out-Null
@@ -47,29 +34,18 @@ Get-ChildItem "$sharedSrc\modules\*.mdc" | ForEach-Object {
     Write-Host "  module: $($_.Name)"
 }
 
-# ---------------------------------------------------------------------------
-# 2. ERP-only → iShangoERP
-#    Copia erp-*.mdc, workflow.mdc, root.mdc, ask-mode-expert.mdc y
-#    actualizacion-reglas-erp.mdc (renombrado a actualizacion-reglas.mdc).
-# ---------------------------------------------------------------------------
-Write-Host "`n[2/3] ERP-only → iShangoERP" -ForegroundColor Cyan
-
+# --- 2. ERP-only a iShangoERP ---
+Write-Host "[2/3] ERP-only -> iShangoERP" -ForegroundColor Cyan
 $erpSrc = "$here\rules\erp"
 Get-ChildItem "$erpSrc\*.mdc" | ForEach-Object {
-    # actualizacion-reglas-erp.mdc → actualizacion-reglas.mdc
     $destName = $_.Name -replace "^actualizacion-reglas-erp\.mdc$", "actualizacion-reglas.mdc"
     $destPath = Join-Path $erp $destName
     Copy-Item $_.FullName -Destination $destPath -Force
     Write-Host "  erp: $destName"
 }
 
-# ---------------------------------------------------------------------------
-# 3. Motor-only → ishango-motor
-#    Copia workflow-motor.mdc→workflow.mdc, root-motor.mdc→root.mdc,
-#    actualizacion-reglas-motor.mdc→actualizacion-reglas.mdc y el resto.
-# ---------------------------------------------------------------------------
-Write-Host "`n[3/3] Motor-only → ishango-motor" -ForegroundColor Cyan
-
+# --- 3. Motor-only a ishango-motor ---
+Write-Host "[3/3] Motor-only -> ishango-motor" -ForegroundColor Cyan
 $motorSrc = "$here\rules\motor"
 Get-ChildItem "$motorSrc\*.mdc" | ForEach-Object {
     $destName = $_.Name `
@@ -81,7 +57,6 @@ Get-ChildItem "$motorSrc\*.mdc" | ForEach-Object {
     Write-Host "  motor: $destName"
 }
 
-# layers/ — si existe en motor, sincronizar
 $motorLayersSrc  = "$motorSrc\layers"
 $motorLayersDest = "$motor\layers"
 if (Test-Path $motorLayersSrc) {
@@ -90,7 +65,6 @@ if (Test-Path $motorLayersSrc) {
     Write-Host "  layers/ sincronizado"
 }
 
-# ---------------------------------------------------------------------------
-Write-Host "`nSync completo." -ForegroundColor Green
+Write-Host "Sync completo." -ForegroundColor Green
 Write-Host "  ERP:   $erp"
 Write-Host "  Motor: $motor"
