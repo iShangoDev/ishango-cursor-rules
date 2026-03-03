@@ -148,7 +148,7 @@ No hay `canCreate`, `canEdit`, `canDelete` — el módulo es solo lectura + acci
 
 ## Mejoras posibles
 
-- Modal "Convertir a crédito" en ERP — llamar a `/api/solicitud-credito/[id]/convertir` (Motor ya expone POST convertir).
+- Modal "Convertir a crédito" en ERP — llamar a `/api/solicitud-credito/[id]/convertir` (Motor ya expone POST convertir); el botón en ERP queda para una iteración posterior.
 - Estado badge específico para solicitudes (EvaluationStatusBadge de Credinter) si se requiere.
 - Filtro `estado` en listado.
 
@@ -157,6 +157,8 @@ No hay `canCreate`, `canEdit`, `canDelete` — el módulo es solo lectura + acci
 ## Motor — V0.32 implementado
 
 Tabla `solicitudes_credito`, API `/v1/solicitud-credito/` (list, detail, convertir), sync Credinter escribiendo en solicitudes_credito, RBAC módulo `solicitud_credito`. Referencia: `docs/solicitud-implementacion/V0.32-solicitud-credito-modulo-independiente.md` (ERP), `docs/solicitud-implementacion-erp/V0.32-Plan-Implementacion-ERP.md` (Motor).
+
+**Credinter:** envía a `POST /v1/credinter/solicitudes` (payload CredinterSolicitudCreate); la respuesta trae `solicitud_credito_id`, que Credinter persiste en `aquarius.request` (campo `erp_solicitud_credito_id`). Sin fallback a `/solicitud`.
 
 ---
 
