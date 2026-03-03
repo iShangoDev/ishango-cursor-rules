@@ -1,20 +1,141 @@
 ---
-description: Agente Módulo Roles ERP — aplica cuando Cursor edita archivos del módulo roles en iShangoERP
-globs: ["src/components/roles/**/*.tsx", "src/components/roles/**/*.ts", "src/app/(private)/app/roles/**/*.tsx", "src/app/api/roles/**/*.ts", "src/app/api/empresas/[id]/modulos-con-roles/**/*.ts", "src/lib/data/roles-server.ts"]
+description: Agente Módulo Roles — aplica cuando Cursor edita archivos del módulo roles en iShangoERP
+globs: [
+  "src/components/roles/**/*.tsx",
+  "src/components/roles/**/*.ts",
+  "src/app/(private)/app/roles/**/*.tsx",
+  "src/app/api/roles/**/*.ts",
+  "src/app/api/empresas/[id]/modulos-con-roles/**/*.ts",
+  "src/lib/data/roles-server.ts"
+]
 ---
 
-# Módulo Roles — iShangoERP
+# Módulo Roles — iShango Sistema
 
-## Modelo extendido
-- **Modelo Devias:** CRUD Lista Simple
-- **Referencia:** components/dashboard/customer/, Personas
-- **Patrón listado:** Batch
-- **Patrón:** Tabla + filtro por módulo + modales crear/editar + checkboxes permisos
+## Comportamiento declarado (Dimensión 2)
 
-## Descripción
-Gestión de roles RBAC por empresa y módulo. El admin crea roles, asigna permisos del catálogo fijo y los asigna a usuarios. Primer módulo de administración del sistema.
+- Crea
+- Modifica
+- Elimina
+- Lee
 
-## Tipos TypeScript — src/components/rbac/rbac.types.ts
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Principal + detalle (roles + rol_permisos)
+
+Los roles viven en el módulo RBAC del Motor (`app/modules/rbac/`). Ver `modules/rbac.mdc` para tablas, modelo SQLModel y schemas.
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `roles` | Roles por empresa y módulo | `empresa_id`, `modulo_id` |
+| `rol_permisos` | Permisos asignados a un rol | `rol_id` |
+
+Catálogo de permisos fijo (no tabla): `read`, `create`, `edit`, `delete`, `configure`.
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD + acción de negocio (PUT permisos)
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | `/v1/roles/` | Listar roles (`?empresa_id=&modulo_id=`) | ✅ |
+| POST | `/v1/roles/` | Crear rol con permisos iniciales | ✅ |
+| GET | `/v1/roles/{id}` | Detalle rol con permisos | ✅ |
+| PATCH | `/v1/roles/{id}` | Actualizar nombre/descripción/activo | ✅ |
+| PUT | `/v1/roles/{id}/permisos` | Reemplazar todos los permisos del rol | ✅ |
+| DELETE | `/v1/roles/{id}` | Soft delete del rol | ✅ |
+| GET | `/v1/empresas/{id}/modulos-con-roles` | Módulos + roles en batch (`?modulo_id=` opcional) | ✅ |
+
+### ListParams / query params
+
+```
+GET /v1/roles/?empresa_id=&modulo_id=
+GET /v1/empresas/{id}/modulos-con-roles?modulo_id=
+```
+
+---
+
+## Motor — Reglas de negocio
+
+1. Un rol pertenece a una empresa + módulo — no es global.
+2. El nombre del rol es único por empresa + módulo.
+3. Soft delete en roles.
+4. Antes de soft delete: verificar que no tenga `usuario_roles` activos. Si los tiene → HTTP 409.
+5. `PUT /v1/roles/{id}/permisos` reemplaza todos los permisos — operación atómica.
+6. Endpoints GET usan caché condicional HTTP: `ETag` + `If-None-Match` (304 cuando no hay cambios).
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy puro (con ETag en GET)
+
+| Ruta BFF | Método | Proxy Motor |
+|----------|--------|-------------|
+| `/api/roles?empresa_id=&modulo_id=` | GET | `/v1/roles/` |
+| `/api/roles` | POST | `/v1/roles/` |
+| `/api/roles/[id]` | GET | `/v1/roles/{id}` |
+| `/api/roles/[id]` | PATCH | `/v1/roles/{id}` |
+| `/api/roles/[id]` | DELETE | `/v1/roles/{id}` |
+| `/api/roles/[id]/permisos` | PUT | `/v1/roles/{id}/permisos` |
+| `/api/empresas/[id]/modulos-con-roles` | GET | `/v1/empresas/{id}/modulos-con-roles` |
+
+Todos usan `motorFetch` de `src/lib/motor-fetch.ts`. GET de roles y modulos-con-roles usan `motor-etag-cache.ts` para 304.
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** List only (CRUD vía modales)
+
+```
+/app/roles  ← listado con filtro por módulo, modales crear/editar
+```
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** CRUD Lista Simple
+**Referencia:** components/dashboard/customer/, Personas
+**Patrón listado:** Batch (datos agrupados por módulo vía `modulos-con-roles`)
+
+### Estructura de archivos
+
+```
+src/
+├── app/
+│   ├── (private)/app/roles/
+│   │   ├── page.tsx
+│   │   └── loading.tsx
+│   └── api/
+│       ├── roles/
+│       │   ├── route.ts
+│       │   ├── [id]/route.ts
+│       │   └── [id]/permisos/route.ts
+│       └── empresas/[id]/modulos-con-roles/
+│           └── route.ts
+├── components/
+│   ├── rbac/
+│   │   └── rbac.types.ts           ← tipos compartidos (Rol, Permiso, ModuloConRoles)
+│   └── roles/
+│       ├── roles-view.tsx
+│       ├── roles-filters.tsx
+│       ├── roles-table.tsx
+│       ├── roles-form.tsx
+│       ├── rol-crear-modal.tsx
+│       ├── rol-editar-modal.tsx
+│       └── use-roles.ts
+└── lib/data/
+    └── roles-server.ts             ← getModulosConRolesServer (batch server-side)
+```
+
+### Tipos TypeScript — rbac.types.ts
+
 ```typescript
 export type Permiso = "read" | "create" | "edit" | "delete" | "configure"
 
@@ -29,107 +150,63 @@ export interface Rol {
   created_at: string
 }
 
-export interface RolCreatePayload {
-  empresa_id: string
-  modulo_id: string
-  nombre: string
-  descripcion?: string
-  permisos: Permiso[]
+export interface ModuloConRoles {
+  modulo: ModuloSistema
+  roles: Rol[]
 }
 
-export interface RolUpdatePayload {
-  nombre?: string
-  descripcion?: string
-  activo?: boolean
-}
-
-export interface RolPermisosUpdatePayload {
-  permisos: Permiso[]
-}
+export interface RolCreatePayload { ... }
+export interface RolUpdatePayload { ... }
+export interface RolPermisosUpdatePayload { permisos: Permiso[] }
 ```
 
-## Estructura de archivos
-```
-src/
-├── components/
-│   ├── rbac/
-│   │   └── rbac.types.ts           ← tipos compartidos RBAC
-│   └── roles/
-│       ├── roles-view.tsx          ← Client — estado, permisos
-│       ├── roles-filters.tsx       ← filtro por módulo (searchParams)
-│       ├── roles-table.tsx         ← tabla: nombre, módulo, permisos (chips), acciones
-│       ├── roles-form.tsx          ← form con checkboxes de permisos
-│       ├── rol-crear-modal.tsx
-│       ├── rol-editar-modal.tsx
-│       └── use-roles.ts            ← mutations al BFF
-├── app/
-│   ├── (private)/app/roles/
-│   │   └── page.tsx
-│   └── api/roles/
-│       ├── route.ts                ← GET list + POST create
-│       ├── [id]/
-│       │   └── route.ts            ← GET + PATCH + DELETE
-│       └── [id]/permisos/
-│           └── route.ts            ← PUT reemplazar permisos
-```
+### Reglas UI específicas
 
-## BFF — contratos
+1. `read` siempre checked y disabled en el form de permisos — un rol sin read no tiene sentido.
+2. No se puede eliminar un rol con usuarios asignados — Motor devuelve 409; toast "El rol tiene usuarios asignados. Quitá las asignaciones primero."
+3. Filtro por módulo en `roles-filters.tsx` — Select con searchParams, módulos del batch.
+4. Layout: Card con RolesFilters + Divider + tabla (patrón Personas/customer).
+5. Chips de permisos en tabla: `read` default, `create` success, `edit` warning, `delete` error, `configure` info.
 
-| Ruta BFF | Método | Proxy Motor |
-|----------|--------|-------------|
-| `/api/roles?empresa_id=&modulo_id=` | GET | `/v1/roles/` |
-| `/api/roles` | POST | `/v1/roles/` |
-| `/api/roles/[id]` | GET | `/v1/roles/{id}` |
-| `/api/roles/[id]` | PATCH | `/v1/roles/{id}` |
-| `/api/roles/[id]` | DELETE | `/v1/roles/{id}` |
-| `/api/roles/[id]/permisos` | PUT | `/v1/roles/{id}/permisos` |
-| `/api/empresas/[id]/modulos-con-roles` | GET | `/v1/empresas/{id}/modulos-con-roles` |
+### Frontera server/client
 
-Todos usan `motorFetch` de `src/lib/motor-fetch.ts`.
+- `page.tsx` resuelve datos iniciales server-side con `getModulosConRolesServer`.
+- `roles-view.tsx` recibe `initialEmpresaId`, `initialData`, `initialModuloId`, `initialError`.
+- Cliente usa React Query para revalidación y mutaciones, no para duplicar fetch inicial.
 
-## UI de permisos en roles-form.tsx
-```typescript
-const PERMISOS_CATALOGO: Permiso[] = ["read", "create", "edit", "delete", "configure"]
+---
 
-// read siempre checked y disabled — un rol sin read no tiene sentido
-// Los demás son checkboxes libres
-```
+## Permisos RBAC (Dimensión 7)
 
-## Renderizado de permisos en tabla
-Cada permiso se muestra como `Chip` MUI con color por tipo:
-- `read` → color `default`
-- `create` → color `success`
-- `edit` → color `warning`
-- `delete` → color `error`
-- `configure` → color `info`
+**Patrón:** CRUD básico
 
-## Permisos UI (roles-view.tsx)
 ```typescript
 const canCreate = puedeHacer("roles", "create")
 const canEdit   = puedeHacer("roles", "edit")
 const canDelete = puedeHacer("roles", "delete")
 ```
 
-## Reglas UI específicas
-1. `read` siempre checked y disabled en el form de permisos
-2. No se puede eliminar un rol que tiene usuarios asignados — el Motor devuelve 409; mostrar mensaje "El rol tiene usuarios asignados. Quitá las asignaciones primero."
-3. Filtro por módulo en `roles-filters.tsx` — Select con searchParams, módulos del batch `/api/empresas/{id}/modulos-con-roles`
-4. Layout: Card con RolesFilters + Divider + tabla (patrón Personas/customer)
-
-## Frontera server/client (obligatoria)
-
-- `src/app/(private)/app/roles/page.tsx` debe resolver datos iniciales server-side.
-- La carga inicial usa `src/lib/data/roles-server.ts` (batch `modulos-con-roles`).
-- `roles-view.tsx` recibe `initialEmpresaId`, `initialData`, `initialModuloId`, `initialError`.
-- El cliente usa React Query para revalidación y mutaciones, no para duplicar fetch inicial.
-
-## Decisiones técnicas
-- `rbac.types.ts` es compartido entre roles y usuarios — no duplicar tipos
-- `Permiso` es `type`, no enum TypeScript — más simple de serializar
+Pasar `canCreate`, `canEdit`, `canDelete` a hijos. Solo en `roles-view.tsx` — nunca en componentes hijos.
 
 ---
 
-## Motor — No implementado (módulo dedicado)
+## Decisiones técnicas
 
-> Los endpoints RBAC existen en Motor (`/v1/roles/`, `/v1/empresas/*/modulos-con-roles`) pero viven en `app/modules/rbac/` (ver `modules/rbac.mdc`).
-> Este .mdc cubre la vista ERP. Si se crea `app/modules/roles/` en Motor, documentar aquí la estructura de archivos Motor.
+- `rbac.types.ts` es compartido entre roles y usuarios — no duplicar tipos.
+- `Permiso` es `type`, no enum TypeScript — más simple de serializar.
+- Batch `modulos-con-roles` evita N+1: una llamada trae módulos + roles agrupados.
+- ETag cache en GET para reducir carga al Motor.
+
+---
+
+## Mejoras posibles
+
+- Filtros avanzados (búsqueda por nombre de rol).
+- Paginación visible si el volumen de roles crece (>50 por módulo).
+
+---
+
+## Motor — Módulo dedicado
+
+> Los endpoints RBAC existen en Motor en `app/modules/rbac/` (ver `modules/rbac.mdc`).
+> No existe `app/modules/roles/` — la vista ERP de roles consume el router de roles del módulo RBAC.
