@@ -1,5 +1,5 @@
 ---
-description: Orquestador del sistema iShango — activa módulos por contexto, conduce creación de nuevos módulos por las 9 dimensiones y conoce el workflow completo (ERP + Motor + deploy).
+description: Orquestador del sistema iShango — activa módulos por contexto, conduce creación y normalización de módulos por las 9 dimensiones y conoce el workflow completo (ERP + Motor + deploy).
 globs: [
   "src/components/**/*.tsx",
   "src/components/**/*.ts",
@@ -13,7 +13,18 @@ alwaysApply: false
 
 # Orquestador iShango
 
-Rol único que une conocimiento de módulos y conocimiento de deploy. Se activa automáticamente cuando Cursor trabaja en archivos de módulo. Se invoca explícitamente para crear un módulo nuevo.
+Rol único que une conocimiento de módulos y conocimiento de deploy. Se activa automáticamente cuando Cursor trabaja en archivos de módulo. Se invoca explícitamente para **crear** un módulo nuevo o **normalizar** un módulo existente.
+
+---
+
+## Dos modos de uso
+
+| Modo | Cuándo | Comando |
+|------|--------|---------|
+| **Crear** | El módulo no existe en ERP ni Motor | `@ishango-orquestador quiero crear el módulo [nombre]` |
+| **Normalizar** | El módulo ya existe pero su .mdc está incompleto, desactualizado o solo cubre un lado | `normaliza el módulo [nombre] según las 9 dimensiones` |
+
+Referencia: Manual Cursor iShango (MANUAL-CURSOR-ISHANGO.md).
 
 ---
 
@@ -42,7 +53,21 @@ Cada .mdc cubre **ambas caras** (Motor + ERP) del módulo.
 
 ---
 
-## Cuestionario — Crear módulo nuevo
+## Modo A — Crear módulo nuevo
+
+### Cuándo usarlo
+
+Cuando el módulo no existe ni en ERP ni en Motor.
+
+### Comando de inicio
+
+```
+@ishango-orquestador quiero crear el módulo [nombre]
+```
+
+Ejemplo: `@ishango-orquestador quiero crear el módulo cobranza`
+
+### Cuestionario — 9 dimensiones
 
 Árbol finito de decisión. Navegar dimensión por dimensión. Al final genera el .mdc del módulo.
 
@@ -189,6 +214,73 @@ Cuando el usuario elige Z en cualquier dimensión:
 6. El usuario confirma o corrige
 
 El objetivo de Delegar es acelerar el cuestionario cuando el usuario no está seguro, sin perder la transparencia de la decisión.
+
+---
+
+## Modo B — Normalizar módulo existente
+
+### Cuándo usarlo
+
+Cuando el módulo ya existe pero su `.mdc` está incompleto, desactualizado, o solo cubre un lado (solo ERP o solo Motor).
+
+### Regla de oro
+
+**Un chat = un módulo.** Mezclar módulos en un chat contamina el contexto y genera resultados incorrectos.
+
+### Flujo
+
+```
+1. Abrir chat nuevo en Cursor
+2. Abrir al menos UN archivo del módulo (activa los globs automáticamente)
+3. Escribir el comando de normalización
+4. Revisar y confirmar cada sección que Cursor proponga
+5. Verificar que el .mdc quedó completo
+6. Guardar el .mdc actualizado en ishango-cursor-rules/rules/shared/modules/
+7. Correr sync-cursor.ps1 → distribuye a ERP y Motor
+8. Commitear en ishango-cursor-rules + ERP + Motor (los tres repos)
+```
+
+### Comando de normalización
+
+```
+normaliza el módulo [nombre] según las 9 dimensiones
+```
+
+Ejemplos: `normaliza el módulo roles según las 9 dimensiones`, `normaliza el módulo creditos según las 9 dimensiones`
+
+También podés ser más específico:
+```
+el módulo roles le falta la sección Motor, completala
+actualiza el .mdc de usuarios con los endpoints reales del Motor
+```
+
+### Lo que Cursor hace automáticamente
+
+- Detecta el módulo por los globs (no hace falta decirle cuál es)
+- Lee el `.mdc` existente antes de proponer cambios
+- Compara contra el código real (archivos abiertos y referenciados)
+- Sigue el template de 9 dimensiones: Motor (datos, API, reglas) + ERP (BFF, root, frontend) + permisos
+- Propone la sección `Motor — No implementado` si no existe contraparte en Motor
+
+### Lo que pone el usuario
+
+- Abrir el archivo correcto del módulo antes de chatear
+- Confirmar o corregir cada sección propuesta
+- Si algo está incompleto en el código: revisarlo antes de normalizar para que Cursor lo vea
+- Guardar el `.mdc` resultante en `ishango-cursor-rules` y correr el sync
+
+### Checklist de cierre por chat
+
+Al terminar cada chat de normalización, verificar:
+
+- [ ] El `.mdc` tiene todas las secciones (Comportamiento, Motor-Datos, Motor-API, Motor-Reglas, ERP-BFF, ERP-Root, ERP-Frontend, Permisos, Decisiones, Mejoras)
+- [ ] Los globs cubren ERP **y** Motor si el módulo existe en ambos repos
+- [ ] Si el módulo tiene sección "No implementado": es correcto dejarlo así hasta que se implemente ese lado
+- [ ] El `.mdc` fue guardado en `C:\dev\ishango-cursor-rules\rules\shared\modules\`
+- [ ] Se corrió `.\sync-cursor.ps1` y llegó a ERP y Motor sin errores
+- [ ] Se commiteó en `ishango-cursor-rules` con mensaje descriptivo
+- [ ] Se commiteó en `iShangoERP`: `git add .cursor/ ; git commit -m "sync: ..." ; git push`
+- [ ] Se commiteó en `ishango-motor`: `git add .cursor/ ; git commit -m "sync: ..." ; git push`
 
 ---
 
