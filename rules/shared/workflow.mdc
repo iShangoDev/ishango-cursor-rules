@@ -1,0 +1,62 @@
+---
+description: Comandos de push y deploy por repo (ERP, Motor, cursor-rules). El agente ejecuta solo estos.
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Workflow — Push y deploy (lista cerrada)
+
+PowerShell: usar `;` no `&&`. Rutas: `c:\dev\iShangoERP`, `C:\dev\ishango-motor`, `C:\dev\ishango-cursor-rules`.
+
+El agente ejecuta solo los comandos definidos aquí.
+
+---
+
+## REPO 1 — iShangoERP
+
+### Push (código)
+
+1. El agente ejecuta pre-push: `npm run validate:ux ; npm run smoke:ux`
+2. Si falla, se detiene y reporta; no hace push
+3. Si pasa: `git add .` → `git commit -m "..."` → `git push origin develop` (o la rama en la que se trabaje)
+
+### Deploy
+
+4. No hay comando de deploy: Vercel despliega al push a main, staging o develop. El agente no ejecuta nada más.
+
+---
+
+## REPO 2 — iShangoMotor
+
+### Push (código)
+
+5. El agente ejecuta: `git add .` → `git commit -m "..."` → `git push origin main`
+6. No hay pre-push obligatorio para Motor
+
+### Deploy
+
+7. El deploy lo hace GitHub Actions al push a main. El agente no ejecuta el deploy.
+
+### Validación post-deploy (cierra el flujo)
+
+8. El agente ejecuta validación por SSH: `ssh deploy@159.89.89.130`
+9. En la sesión SSH: `cd /app/ishango-motor && git pull && restart`
+10. El agente comprueba que el servicio responde (p. ej. `curl` a `http://localhost:8001/health` o el endpoint que use el Motor). Si devuelve 200, el flujo se da por cerrado.
+
+---
+
+## REPO 3 — ishango-cursor-rules
+
+**Condición:** El agente solo edita reglas cuando el usuario pide cambiar reglas.
+
+### Orden (obligatorio)
+
+11. Editar en `C:\dev\ishango-cursor-rules`
+12. Sincronizar: desde `C:\dev\ishango-cursor-rules` ejecutar `.\sync-cursor.ps1` (copia a carpetas locales de ERP y Motor; no hace git)
+13. En ishango-cursor-rules: `git add .` → `git commit -m "..."` → `git push`
+14. En iShangoERP (solo .cursor/): `cd c:\dev\iShangoERP` → `git add .cursor/` → `git commit -m "sync: ..."` → `git push origin develop`
+15. En iShangoMotor (solo .cursor/): `cd C:\dev\ishango-motor` → `git add .cursor/` → `git commit -m "sync: ..."` → `git push origin main`
+
+**Push solo de .cursor no es deploy:** Los pasos 14 y 15 suben solo `.cursor/`, no código. No cuentan como deploy ni disparan flujo de deploy. El deploy se considera solo cuando hay cambios de código.
+
+**Deploy de reglas:** No hay deploy de app; "deploy" de reglas = haber ejecutado 12–15 en ese orden.

@@ -223,3 +223,10 @@ Tab Roles: siempre visible (read). Botones asignar/quitar solo si `canEdit`.
 
 - Cambiar password desde la UI (endpoint `/cambiar-password` ya existe en Motor)
 - Filtro por nombre/email en la lista (parámetro `q` ya existe en Motor)
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** —

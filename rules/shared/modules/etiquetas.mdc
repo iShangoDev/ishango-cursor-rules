@@ -23,3 +23,10 @@ globs: ["src/components/etiquetas/**/*.tsx", "src/components/etiquetas/**/*.ts",
 
 > Este módulo no tiene componente propio en iShangoMotor todavía.
 > Si se agrega, documentar aquí: tabla, schema, endpoints `/v1/etiquetas/`.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** Implementar tabla/API y endpoints en Motor si se requiere backend propio (tabla, schema, `/v1/etiquetas/`).
+- **Pendiente en ERP:** —

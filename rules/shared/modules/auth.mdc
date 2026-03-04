@@ -277,3 +277,10 @@ ENVIRONMENT=local|staging|production
 - **bcrypt directo** en lugar de passlib: passlib es incompatible con bcrypt 5.x
 - **`user` en lugar de `usuario`**: refleja el campo real del Motor (normalizar en V0.4)
 - **empresa y modulos desde DB**: V0.4 usa RBACRepository para resolver empresa y modulos en login
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** —

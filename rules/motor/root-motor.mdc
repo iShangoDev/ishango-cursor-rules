@@ -8,7 +8,7 @@ alwaysApply: true
 
 ## Fuente de verdad
 - **`.cursor/rules/`** es la autoridad del proyecto. Si hay conflicto con docs/, prevalece .cursor.
-- Ver `fuente-de-verdad.mdc` para mapeo completo.
+- Ver `fuente-de-verdad.mdc` y `actualizacion-reglas.mdc` (shared) para mapeo y proceso.
 
 ## Dónde corre el Motor — REGLA CRITICA
 - **El Motor SOLO corre en Digital Ocean** (159.89.89.130:8001).

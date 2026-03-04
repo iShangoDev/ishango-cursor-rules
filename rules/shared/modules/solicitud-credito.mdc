@@ -188,3 +188,10 @@ git add . ; git commit -m "sync: solicitud-credito.mdc" ; git push
 | modules/credinter_sync.mdc | Sync Credinter → Motor (POST persiste en solicitudes_credito) |
 | docs/investigacion/20260302-solicitud-credito-modulo.md | Investigación y arquitectura |
 | docs/solicitud-implementacion/V0.32-solicitud-credito-modulo-independiente.md | Plan Motor para tabla y API propias |
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** Ver V0.32 (tabla y API propias). —
+- **Pendiente en ERP:** —

@@ -27,3 +27,10 @@ globs: ["src/components/auditoria/**/*.tsx", "src/components/auditoria/**/*.ts",
 
 > Este módulo no tiene componente propio en iShangoMotor todavía.
 > Si se agrega, documentar aquí: tabla audit_log, schema, endpoints `/v1/auditoria/`.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** Implementar tabla/API y endpoints en Motor si se requiere backend propio (tabla audit_log, schema, `/v1/auditoria/`).
+- **Pendiente en ERP:** —

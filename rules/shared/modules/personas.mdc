@@ -231,3 +231,10 @@ Pasar `canCreate`, `canEdit`, `canDelete` a hijos. Solo llamar `puedeHacer()` en
 - Filtros: búsqueda por nombre, estado — ver `_devias-kit/components/customer/customers-filters.tsx`
 - Paginación: cuando el listado crezca — ver `customers-pagination.tsx`
 - Layout: Card contenedor con Divider entre filtros y tabla — ver `app/customers/page.tsx`
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** —

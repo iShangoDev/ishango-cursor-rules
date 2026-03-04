@@ -137,3 +137,10 @@ migrations/versions/
 > - `modules/usuarios.mdc` — detalle de usuario con roles (`/v1/usuarios/{id}?include=roles`, `/v1/usuario-roles/`)
 >
 > No tiene root URL propio en ERP. La lógica RBAC vive embebida en los módulos funcionales.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** —

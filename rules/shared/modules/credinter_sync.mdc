@@ -36,3 +36,10 @@ Ver `docs/credinter/IDENTIFICACION-PAGOS.md` — contrato, lógica sufijo numér
 > Este módulo no tiene componente en iShangoERP.
 > Credinter llama directamente al Motor via API Key — el ERP no intermedia en este flujo.
 > Si se agrega vista de monitoreo en ERP, documentar aquí: BFF, root URL, componentes.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** Vista de monitoreo de sync si se requiere (BFF, root URL, componentes); si no, —.

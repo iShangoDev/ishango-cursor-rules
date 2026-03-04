@@ -210,3 +210,10 @@ Pasar `canCreate`, `canEdit`, `canDelete` a hijos. Solo en `roles-view.tsx` — 
 
 > Los endpoints RBAC existen en Motor en `app/modules/rbac/` (ver `modules/rbac.mdc`).
 > No existe `app/modules/roles/` — la vista ERP de roles consume el router de roles del módulo RBAC.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** —

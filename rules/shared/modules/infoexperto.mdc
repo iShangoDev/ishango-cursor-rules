@@ -193,6 +193,7 @@ En ERP, cuando exista UI: `puedeHacer('infoexperto', 'create')`, `puedeHacer('in
 
 ---
 
-## Pendiente en el otro repo
+## Pendiente por repo
 
+- **Pendiente en Motor:** —
 - **Pendiente en ERP:** UI de consulta de reportes (listado/detalle) y/o pantalla "Evaluar DNI" si se requiere. Ver `docs/infoexperto/` y contrato evaluate en Motor.

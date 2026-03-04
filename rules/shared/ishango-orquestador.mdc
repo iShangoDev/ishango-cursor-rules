@@ -11,22 +11,23 @@ globs: [
 alwaysApply: false
 ---
 
-# Orquestador iShango
+# Orquestador iShango — CursorDev
 
-Rol único que une conocimiento de módulos y conocimiento de deploy. Se activa automáticamente cuando Cursor trabaja en archivos de módulo. Se invoca explícitamente para **crear** un módulo nuevo o **normalizar** un módulo existente.
+**CursorDev** — Motor de desarrollo. Todo pedido al orquestador es de **desarrollo e implementación**. Se activa automáticamente cuando Cursor trabaja en archivos de módulo; se invoca con `@ishango-orquestador` para crear módulos o cambiar existentes.
 
-**Propósito:** Orientar el proceso de creación y normalización. Los .mdc de módulos guían el **desarrollo** del código cuando Cursor implementa.
+**Propósito:** Que el agente **implemente** usando .cursor (workflow.mdc, modules/*.mdc, erp-root, fuente-de-verdad). Los .mdc de módulos guían el desarrollo del código.
 
 ---
 
-## Dos modos de uso
+## Flujo según tipo de pedido
 
-| Modo | Cuándo | Comando |
-|------|--------|---------|
-| **Crear** | El módulo no existe en ERP ni Motor | `@ishango-orquestador quiero crear el módulo [nombre]` |
-| **Normalizar** | El módulo ya existe pero su .mdc está incompleto, desactualizado o solo cubre un lado | `normaliza el módulo [nombre] según las 9 dimensiones` |
+| Tipo de pedido | Flujo |
+|----------------|-------|
+| **Módulo nuevo** | **Fase 1** — Cuestionario 9 dimensiones + discusión hasta que el agente tenga TODO lo necesario. Cierre: agente declara "Fase 1 cerrada" y resume outputs. **Fase 2** — Desarrollo e implementación (generar/actualizar `modules/{modulo}.mdc`, código Motor/ERP según erp-crear-modulo y erp-devia-models, push según workflow.mdc). |
+| **Cambio en módulo existente** | Sin fases. Abrir `modules/{modulo}.mdc` y erp-root (o root Motor) → implementar → push según workflow.mdc. |
+| **Solo reglas .cursor** | Editar en ishango-cursor-rules → sync → push en 3 repos (workflow pasos 11–15). |
 
-Referencia: Manual Cursor iShango (MANUAL-CURSOR-ISHANGO.md).
+**Regla:** En Fase 2 no responder con propuestas; **implementar** usando workflow.mdc, modules/*.mdc, erp-root, fuente-de-verdad. En Fase 1 preguntar o discutir hasta tener la información completa; solo entonces cerrar y pasar a Fase 2.
 
 ---
 
@@ -39,6 +40,7 @@ Cuando Cursor detecta archivos de un módulo, activa el .mdc correspondiente:
 | `*/personas/**` | `.cursor/rules/modules/personas.mdc` |
 | `*/creditos/**` | `.cursor/rules/modules/creditos.mdc` |
 | `*/solicitud-credito/**` | `.cursor/rules/modules/solicitud-credito.mdc` |
+| `*/linea-credito/**` | `.cursor/rules/modules/linea-credito.mdc` |
 | `*/usuarios/**` | `.cursor/rules/modules/usuarios.mdc` |
 | `*/auth/**` | `.cursor/rules/modules/auth.mdc` |
 | `*/roles/**` | `.cursor/rules/modules/roles.mdc` |
@@ -57,7 +59,7 @@ Cada .mdc cubre **ambas caras** (Motor + ERP) del módulo.
 
 ---
 
-## Modo A — Crear módulo nuevo
+## Modo A — Crear módulo nuevo (flujo en dos fases)
 
 ### Cuándo usarlo
 
@@ -71,17 +73,35 @@ Cuando el módulo no existe ni en ERP ni en Motor.
 
 Ejemplo: `@ishango-orquestador quiero crear el módulo cobranza`
 
-### Cuestionario — 9 dimensiones
+### Fase 1 — Cuestionario + discusión
 
-Árbol finito de decisión. Navegar dimensión por dimensión. Al final genera el .mdc del módulo.
+Recorrer el cuestionario 9 dimensiones (abajo) y discutir con el usuario hasta que el agente tenga **toda** la información necesaria. **Cierre de Fase 1:** El agente declara "Fase 1 cerrada" y resume los outputs (modelo Devias, rutas, API, permisos, etc.). Solo entonces se pasa a Fase 2.
 
-**Opción disponible en cualquier dimensión:**
-```
-Z. Delegar — el agente analiza el contexto del módulo y elige la mejor opción.
-             Requiere que haya al menos un archivo del módulo abierto o que se
-             haya descrito el negocio en el chat. El agente explica su razonamiento
-             antes de asignar el patrón.
-```
+### Fase 2 — Desarrollo e implementación
+
+Generar/actualizar `modules/{modulo}.mdc`, implementar según erp-crear-modulo + erp-devia-models, push según workflow.mdc. No proponer; implementar.
+
+---
+
+### Cuestionario — 9 dimensiones (y uso por el agente)
+
+Árbol finito de decisión. Navegar dimensión por dimensión. Al final el agente tiene los **outputs** necesarios para implementar.
+
+**Uso por el agente** — Lo que el agente debe producir por dimensión para implementar:
+
+| Dimensión | Output para implementar |
+|-----------|-------------------------|
+| 1 Datos | Patrón Motor: tabla única \| principal+detalle \| historial \| junction |
+| 2 Comportamiento | Set de verbos: Lee \| Crea \| Modifica \| Elimina \| Recibe \| Transfiere (para API y permisos) |
+| 3 API Motor | Patrón: CRUD estándar \| CRUD+acciones \| solo lectura \| import \| export |
+| 4 BFF | proxy puro \| +transformación \| +agregación |
+| 5 Root URL | Rutas concretas: /app/{modulo}, /create, /[id], /[id]/edit |
+| 6 Frontend | Modelo Devias y ruta de extensión (erp-devia-models.mdc); patrón listado: paginada \| simple \| batch |
+| 7 Permisos | read \| CRUD básico \| CRUD+acciones \| admin only; si acciones: lista (aprobar, rechazar, etc.) |
+| 8 .mdc | Generar contenido del .mdc con la plantilla existente |
+| 9 Documentación | Referenciar doc existente o crear V{X.Y}-Plan en docs |
+
+**Opción Z (Delegar) en cualquier dimensión:** Ver sección "Comportamiento de Delegar" más abajo.
 
 ### Dimensión 1 — Datos
 
@@ -206,22 +226,20 @@ A. Sí → referenciar en el .mdc
 B. No → crear V{X.Y}-Plan-Implementacion.md antes de implementar
 ```
 
-### Comportamiento de "Delegar"
+### Comportamiento de "Delegar" (Z)
 
-Cuando el usuario elige Z en cualquier dimensión:
+**Delegar** = el agente **infiere** a partir del pedido del usuario y de los archivos abiertos (o descripción del negocio), asigna la opción que corresponda y continúa (en Fase 1 sigue con la siguiente dimensión o cierra; en Fase 2 sigue con la implementación). Solo pregunta si falta información crítica para elegir (ej. volumen de datos, criterio de negocio no documentado).
 
-1. El agente lee los archivos abiertos del módulo (código, tipos, endpoints existentes)
-2. Si no hay archivos abiertos, pregunta por la descripción del negocio
-3. Analiza el contexto y elige la opción más adecuada del menú
-4. **Explica el razonamiento** antes de asignar el patrón
-5. Propone la elección como pregunta: "Recomiendo B — ¿confirmas?"
-6. El usuario confirma o corrige
-
-El objetivo de Delegar es acelerar el cuestionario cuando el usuario no está seguro, sin perder la transparencia de la decisión.
+1. El agente lee los archivos abiertos del módulo (código, tipos, endpoints existentes) o la descripción del negocio en el chat.
+2. Analiza el contexto y elige la opción más adecuada del menú para esa dimensión.
+3. Asigna el patrón y sigue (no bloquea esperando confirmación salvo que sea ambiguo).
+4. Si la inferencia es incierta, pregunta o resume la elección para que el usuario confirme o corrija.
 
 ---
 
-## Modo B — Normalizar módulo existente
+## Modo B — Cambio en módulo existente (sin fases)
+
+Cuando el módulo ya existe: el `.mdc` es el contrato. Abrir `modules/{modulo}.mdc` y erp-root (o root Motor); implementar el cambio; push según workflow.mdc. No hay Fase 1/Fase 2.
 
 ### Cuándo usarlo
 
@@ -459,63 +477,17 @@ cd C:\dev\ishango-cursor-rules
 git add . ; git commit -m "descripcion del cambio" ; git push
 ```
 
+Para comandos de push en los tres repos, ver **workflow.mdc**.
+
 Repo: https://github.com/iShangoDev/ishango-cursor-rules
 
 ---
 
 ## Workflow — Deploy y push
 
-### ERP (Vercel)
+Comandos de push y deploy por repo: ver **workflow.mdc**. El agente ejecuta solo los comandos definidos allí.
 
-```powershell
-# Gate pre-push (obligatorio)
-npm run validate:ux
-
-# Push
-git add . ; git commit -m "feat({modulo}): descripción" ; git push origin develop
-```
-
-### Ramas del repositorio (ERP)
-
-**Ramas permanentes** (siempre existen):
-- `main` → Production (Vercel), requiere PR + aprobación
-- `staging` → Preview, requiere PR
-- `develop` → Preview, push directo; rama de integración diaria
-
-**Ramas temporales** (prefijos; se cierran tras merge):
-- `feature/*` — desarrollo de funcionalidad; merge a `develop`; **cerrar** tras merge
-- `hotfix/*` — corrección urgente; merge a `develop` o `main` según caso; **cerrar** tras merge
-- `audit/*` — auditoría/bisect (ej. `audit/lote-a-*`); **cerrar** cuando termina la actividad
-
-**Regla para el agente:** Tras mergear una rama temporal a `develop` (o `main`), eliminar la rama local y remota para no acumular ramas obsoletas.
-
-Cierre tras merge (ejemplo):
-```powershell
-# Tras merge feature/xyz a develop
-git checkout develop
-git branch -d feature/xyz
-git push origin --delete feature/xyz
-```
-
-Vercel build automático en cada push. Logs en Vercel Dashboard → Deployments.
-
-### Motor (Digital Ocean)
-
-```bash
-# Desde el servidor o CI
-git push origin main
-# SSH al servidor si deploy manual
-ssh deploy@159.89.89.130
-cd /app/ishango-motor && git pull && restart
-```
-
-### Variables de entorno críticas
-
-| Variable | Dónde | Descripción |
-|----------|-------|-------------|
-| `MOTOR_URL` | Vercel + .env.local | URL del Motor — server-side only |
-| `NEXT_PUBLIC_AUTH_STRATEGY` | Vercel | Debe ser `MOTOR` en producción |
-| `NEXTAUTH_SECRET` | Vercel | Secreto de sesión |
+Resumen: ERP — validate:ux + push develop. Motor — push main + validación SSH. cursor-rules — sync + 3 push (solo .cursor/).
 
 ---
 

@@ -10,7 +10,7 @@ alwaysApply: true
 
 ## Fuente de verdad
 
-**`.cursor/rules/`** es la fuente de verdad del proyecto. `docs/` es información extra. Si hay conflicto, prevalece .cursor.
+**`.cursor/rules/`** es la fuente de verdad del proyecto. `docs/` es información extra. Si hay conflicto, prevalece .cursor. Ver `fuente-de-verdad.mdc` y `actualizacion-reglas.mdc` (shared) para mapeo y proceso.
 
 ## Proyecto
 - Repo: iShangoDev/iShangoERP

@@ -1,0 +1,200 @@
+---
+description: Agente Módulo Línea de Crédito — aplica cuando Cursor edita archivos del módulo linea-credito en ERP o Motor
+globs: [
+  "src/components/linea-credito/**/*.tsx",
+  "src/components/linea-credito/**/*.ts",
+  "src/app/(private)/app/linea-credito/**/*.tsx",
+  "src/app/api/linea-credito/**/*.ts",
+  "app/modules/linea_credito/**/*.py"
+]
+---
+
+# Módulo Línea de Crédito — iShango Sistema
+
+Catálogo de líneas de crédito (productos de crédito). Define nombre, monto máximo, tasa, plazo y estado. Otros módulos (solicitud-credito, creditos) consumen líneas vía API (GET por id). Motor es la fuente única; ERP expone CRUD completo para administración.
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Lee** — listado, detalle por ID (y por API para otros módulos)
+- **Crea** — alta de línea de crédito
+- **Modifica** — actualización de condiciones y estado
+- **Elimina** — soft delete (baja lógica)
+- **Expone data por API** — GET por id para que otros módulos (solicitud-credito, creditos) consulten una fila
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Tabla única
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `lineas_credito` | Línea de crédito: nombre, monto máximo, tasa, plazo, estado | — |
+
+### Modelo SQLModel
+
+```python
+class LineaCredito(SQLModel, table=True):
+    __tablename__ = "lineas_credito"
+    id: uuid.UUID = Field(default_factory=uuid4, primary_key=True)
+    nombre: str = Field(index=True)
+    monto_maximo: Decimal = Field(max_digits=15, decimal_places=2)
+    tasa_mensual: Decimal = Field(max_digits=8, decimal_places=4)  # ej. 2.5 = 2.5%
+    plazo_meses: int = Field(ge=1)
+    activo: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    deleted_at: datetime | None = Field(default=None)
+```
+
+### Schemas
+
+```python
+class LineaCreditoCreate(BaseModel):
+    nombre: str
+    monto_maximo: Decimal
+    tasa_mensual: Decimal
+    plazo_meses: int
+    activo: bool = True
+
+class LineaCreditoUpdate(BaseModel):
+    nombre: str | None = None
+    monto_maximo: Decimal | None = None
+    tasa_mensual: Decimal | None = None
+    plazo_meses: int | None = None
+    activo: bool | None = None
+
+class LineaCreditoRead(BaseModel):
+    id: str
+    nombre: str
+    monto_maximo: Decimal
+    tasa_mensual: Decimal
+    plazo_meses: int
+    activo: bool
+    created_at: datetime
+    updated_at: datetime
+```
+
+### Migración
+
+```
+migrations/versions/YYYYMMDD_add_lineas_credito_table.py
+```
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD estándar (list, create, detail, update, delete). Incluye GET por id para consumo por otros módulos.
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | `/v1/linea-credito/` | Listado (paginado o simple según tamaño) | ✅ JWT |
+| POST | `/v1/linea-credito/` | Crear línea de crédito | ✅ JWT |
+| GET | `/v1/linea-credito/{id}` | Detalle por ID — una fila (uso interno y por otros módulos) | ✅ JWT |
+| PATCH | `/v1/linea-credito/{id}` | Actualizar | ✅ JWT |
+| DELETE | `/v1/linea-credito/{id}` | Soft delete | ✅ JWT |
+
+### ListParams soportados
+
+```
+GET /v1/linea-credito/?page=1&size=25&sort=nombre&activo=true
+```
+
+---
+
+## Motor — Reglas de negocio
+
+1. Solo líneas con `activo=true` pueden ser elegidas al crear solicitudes/créditos (validar en el módulo que consuma).
+2. Soft delete: `deleted_at` no nulo; listados excluyen eliminados por defecto.
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy puro
+
+- GET /api/linea-credito?page=1&size=25 → reenvía al Motor
+- POST /api/linea-credito → LineaCreditoCreatePayload
+- GET /api/linea-credito/[id] → detalle (una fila por id)
+- PATCH /api/linea-credito/[id]
+- DELETE /api/linea-credito/[id]
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+**Patrón:** Completo — list + create + detail + edit
+
+```
+/app/linea-credito           ← listado
+/app/linea-credito/create    ← crear
+/app/linea-credito/[id]      ← detalle
+/app/linea-credito/[id]/edit ← editar
+```
+
+(Create/edit pueden ser modales desde la lista según implementación; el modelo Devias lo define.)
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** CRUD Lista Simple  
+**Referencia:** components/dashboard/customer/, order/  
+**Patrón listado:** Lista simple (carga completa; ≤50 registros típicos)
+
+### Estructura de archivos
+
+```
+src/
+├── app/
+│   ├── (private)/app/linea-credito/
+│   │   ├── page.tsx
+│   │   ├── create/
+│   │   │   └── page.tsx
+│   │   └── [id]/
+│   │       ├── page.tsx
+│   │       └── edit/
+│   │           └── page.tsx
+│   └── api/linea-credito/
+│       ├── route.ts
+│       └── [id]/route.ts
+├── components/linea-credito/
+│   ├── linea-credito-view.tsx
+│   ├── linea-credito-table.tsx
+│   ├── linea-credito-form.tsx
+│   ├── linea-credito.types.ts
+│   └── use-linea-credito.ts
+```
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** Admin only — sin permisos granulares por acción. Solo usuarios con rol de administración acceden al módulo. El sidebar muestra el ítem solo si el usuario es admin (o según configuración de módulos habilitados).
+
+- No usar `puedeHacer('linea-credito', 'create'|'edit'|'delete')`; la visibilidad del módulo implica permiso.
+- Opcional: pasar `canCreate`, `canEdit`, `canDelete` como `true` cuando el usuario ve el módulo, para mantener interfaz homogénea con otros módulos.
+
+---
+
+## Decisiones técnicas
+
+- **GET por id obligatorio:** La API del Motor debe exponer GET `/v1/linea-credito/{id}` que devuelva una fila; otros módulos (solicitud-credito, creditos) la consumen para selectores y validaciones.
+- **Nombre de tabla en Motor:** `lineas_credito`; si el Motor ya tiene `producto_credito`, evaluar unificar o mapear en el BFF para que el ERP hable siempre con `/v1/linea-credito`.
+
+---
+
+## Mejoras posibles
+
+- Listado paginado si el catálogo crece por encima de ~50 líneas.
+- Permisos granulares (read/create/edit/delete) si más roles deben gestionar líneas.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** Definir modelo de datos final, reglas de negocio y API según requerimientos reales. Luego implementar módulo `linea_credito` (tabla, CRUD, GET por id). Plan en `docs/solicitud-implementacion/` cuando se disponga del contexto.
+- **Pendiente en ERP:** Tras disponibilidad del API en Motor y definición de requisitos, implementar rutas, BFF y componentes siguiendo `erp-crear-modulo.mdc` y extendiendo desde customer/ u order/.

@@ -24,3 +24,10 @@ globs: ["src/components/configuracion/**/*.tsx", "src/components/configuracion/*
 
 > Este módulo no tiene componente propio en iShangoMotor todavía.
 > Si se agrega, documentar aquí: tabla configuracion (clave/valor), schema, endpoints `/v1/config/`.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** Implementar tabla/API y endpoints en Motor si se requiere backend propio (tabla configuracion clave/valor, schema, `/v1/config/`).
+- **Pendiente en ERP:** —

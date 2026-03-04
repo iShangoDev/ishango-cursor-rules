@@ -23,3 +23,10 @@ globs: ["src/components/notificaciones/**/*.tsx", "src/components/notificaciones
 
 > Este módulo no tiene componente propio en iShangoMotor todavía.
 > Si se agrega, documentar aquí: tabla notificaciones, schema, endpoints `/v1/notificaciones/`.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** Implementar tabla/API y endpoints en Motor si se requiere backend propio (tabla notificaciones, schema, `/v1/notificaciones/`).
+- **Pendiente en ERP:** —

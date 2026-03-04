@@ -181,3 +181,10 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 - Filtros avanzados: por estado, rango de fechas, monto
 - Exportación de listado a CSV
 - Vista de deudor: créditos agrupados por persona
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** —

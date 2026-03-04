@@ -35,21 +35,24 @@ Get-ChildItem "$sharedSrc\modules\*.mdc" | ForEach-Object {
 }
 
 # --- 2. ERP-only a iShangoERP ---
+# workflow.mdc, actualizacion-reglas.mdc y fuente-de-verdad.mdc vienen de shared (cerebro unico)
 Write-Host "[2/3] ERP-only -> iShangoERP" -ForegroundColor Cyan
 $erpSrc = "$here\rules\erp"
-Get-ChildItem "$erpSrc\*.mdc" | ForEach-Object {
-    $destName = $_.Name -replace "^actualizacion-reglas-erp\.mdc$", "actualizacion-reglas.mdc"
+$erpExclude = @("workflow.mdc", "actualizacion-reglas-erp.mdc", "erp-source-of-truth.mdc")
+Get-ChildItem "$erpSrc\*.mdc" | Where-Object { $_.Name -notin $erpExclude } | ForEach-Object {
+    $destName = $_.Name
     $destPath = Join-Path $erp $destName
     Copy-Item $_.FullName -Destination $destPath -Force
     Write-Host "  erp: $destName"
 }
 
 # --- 3. Motor-only a ishango-motor ---
+# workflow.mdc, actualizacion-reglas.mdc y fuente-de-verdad.mdc vienen de shared (cerebro unico)
 Write-Host "[3/3] Motor-only -> ishango-motor" -ForegroundColor Cyan
 $motorSrc = "$here\rules\motor"
-Get-ChildItem "$motorSrc\*.mdc" | ForEach-Object {
+$motorExclude = @("workflow-motor.mdc", "actualizacion-reglas-motor.mdc", "fuente-de-verdad.mdc")
+Get-ChildItem "$motorSrc\*.mdc" | Where-Object { $_.Name -notin $motorExclude } | ForEach-Object {
     $destName = $_.Name `
-        -replace "^workflow-motor\.mdc$",             "workflow.mdc" `
         -replace "^root-motor\.mdc$",                 "root.mdc" `
         -replace "^actualizacion-reglas-motor\.mdc$", "actualizacion-reglas.mdc"
     $destPath = Join-Path $motor $destName

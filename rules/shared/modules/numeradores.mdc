@@ -23,3 +23,10 @@ globs: ["src/components/numeradores/**/*.tsx", "src/components/numeradores/**/*.
 
 > Este módulo no tiene componente propio en iShangoMotor todavía.
 > Si se agrega, documentar aquí: tabla numeradores, schema, endpoints `/v1/numeradores/`.
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** Implementar tabla/API y endpoints en Motor si se requiere backend propio (tabla numeradores, schema, `/v1/numeradores/`).
+- **Pendiente en ERP:** —
