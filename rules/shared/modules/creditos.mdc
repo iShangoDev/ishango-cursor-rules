@@ -20,7 +20,7 @@ Ver `docs/solicitud-desde-erp/V0.30-Credinter-Migracion.md` en Motor (plan maest
 - **Crea** — apertura de crédito, generación de cuotas
 - **Modifica** — cambio de estado, imputación de pagos
 - **Elimina** — soft delete (baja lógica)
-- **Lee** — listado paginado, detalle con cuotas y pagos
+- **Lee** — listado paginado, detalle con cuotas, pagos y datos de la persona (titular)
 - **Recibe** — sincronización desde Credinter (solicitudes y pagos vía API Key)
 
 ---
@@ -78,6 +78,7 @@ app/modules/creditos/
 | GET | `/v1/creditos/{id}` | Detalle | ✅ JWT |
 | PATCH | `/v1/creditos/{id}` | Actualizar | ✅ JWT |
 | DELETE | `/v1/creditos/{id}` | Soft delete | ✅ JWT |
+| GET | `/v1/creditos/{id}/detalle` | Detalle agregado (credito, cuotas, pagos, persona titular) | ✅ JWT |
 | GET | `/v1/creditos/{id}/cuotas` | Cuotas del crédito (ordenadas por número) | ✅ JWT |
 | POST | `/v1/creditos/simular` | Previsualización amortización francesa (sin persistir) | ✅ JWT |
 | POST | `/v1/creditos/existencia-batch` | Batch check IDs | ✅ JWT |
@@ -98,12 +99,13 @@ app/modules/creditos/
 
 ## ERP — BFF (Dimensión 4)
 
-**Patrón:** Proxy puro
+**Patrón:** Proxy puro; detalle = proxy único (una llamada al Motor).
 
 - GET `/api/creditos?page=1&size=25&...` → forwardea al Motor
 - POST `/api/creditos` → `CreditoCreatePayload`
 - GET/PATCH/DELETE `/api/creditos/[id]`
 - GET `/api/creditos/[id]/cuotas`
+- **GET `/api/creditos/[id]/detalle`** — proxy a `GET /v1/creditos/{id}/detalle`; reenvía el JSON `{ credito, cuotas, pagos, persona }` sin agregación en el BFF.
 - POST `/api/pagos/imputar` (wizard imputar)
 
 Todos usan `motorFetch` y `getMotorUrl()`.
@@ -128,6 +130,10 @@ Todos usan `motorFetch` y `getMotorUrl()`.
 **Referencia:** `components/dashboard/customer/`
 **Patrón listado:** Lista paginada
 
+### Vista detalle
+
+La página de detalle muestra crédito, titular (o "Persona no encontrada"), tabs Cuotas y Pagos. El Client Component `credito-detail-page.tsx` hace GET `/api/creditos/[id]/detalle` y pasa credito, cuotas, pagos, persona a la vista.
+
 ### Estructura de archivos ERP
 
 ```
@@ -140,10 +146,12 @@ src/
 │   └── api/creditos/
 │       ├── route.ts                    ← GET list + POST create
 │       └── [id]/
-│           └── route.ts               ← GET detail + PATCH + DELETE
+│           ├── route.ts                ← GET detail + PATCH + DELETE
+│           └── detalle/route.ts        ← GET detalle (proxy único)
 ├── components/creditos/
 │   ├── creditos-view.tsx              ← Client — estado local, permisos
-│   ├── credito-detail-view.tsx        ← Detalle con tabs cuotas + pagos
+│   ├── credito-detail-page.tsx         ← Client — fetch /detalle, pasa credito/cuotas/pagos/persona a la vista
+│   ├── credito-detail-view.tsx         ← Detalle con tabs cuotas + pagos
 │   ├── creditos-table.tsx             ← tabla MUI
 │   ├── cuotas-table.tsx               ← Tabla cuotas con filas expandibles
 │   ├── credito-form.tsx               ← form crear/editar
@@ -170,6 +178,8 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 ## Decisiones técnicas
 
 - Motor es la ÚNICA fuente de datos — Odoo/FastAPI migraron
+- Detalle: una sola llamada al Motor (`GET /v1/creditos/{id}/detalle`); BFF proxy puro. Vista recibe credito, cuotas, pagos, persona.
+- Errores: BFF devuelve siempre JSON (try/catch en res.json()); cliente no re-lanza para no disparar error boundary.
 - Prefetch: `creditosQueryKey.list({ page: 1, size: 25 })` en `use-prefetch-module.ts` (patrón paginado como personas)
 - Wizard imputar: upload CSV → preview → confirm → resultado (no modal simple)
 - Ver `docs/IMPLEMENTACION-HU1-ENVIAR-A-ERP.md` para flujo Credinter → solicitud crédito
