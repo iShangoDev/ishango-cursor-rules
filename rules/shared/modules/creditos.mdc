@@ -103,11 +103,13 @@ app/modules/creditos/
   - `Activo`: está al día.
   - `Vencido`: última cuota vencida sin pago.
   - `Parcial`: última cuota vencida no cancelada con pago parcial.
+  - `Cancelado`: todas las cuotas pagadas.
 - Chip por cuota:
-  - `Activo`: cuota al día o cancelada.
+  - `Activo`: cuota al día (pendiente, no vencida).
   - `Vencido`: cuota vencida sin pago.
   - `Parcial`: cuota con pago parcial y saldo pendiente.
-- El filtro en listado de créditos debe operar por estos chips (`activo`, `vencido`, `parcial`).
+  - `Cancelado`: cuota totalmente pagada.
+- El filtro en listado de créditos debe operar por estos chips (`activo`, `vencido`, `parcial`, `cancelado`).
 
 ### Llaves y consistencia con pagos
 
