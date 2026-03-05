@@ -1,214 +1,49 @@
 ---
-description: Agente Módulo Productos Crédito — aplica cuando Cursor edita archivos del módulo productos-credito
-globs: [
-  "src/components/productos-credito/**/*.tsx",
-  "src/components/productos-credito/**/*.ts",
-  "src/app/(private)/app/productos-credito/**/*.tsx",
-  "src/app/api/productos-credito/**/*.ts",
-  "app/modules/productos_credito/**/*.py"
-]
+description: Agente experto del módulo productos-credito en el ERP Next.js
+globs: src/app/**/productos-credito/**,src/components/productos-credito/**,src/app/api/productos-credito/**
+alwaysApply: false
 ---
 
-# Módulo Productos Crédito — iShango Sistema
+# ERP — Módulo productos-credito
 
-Administración del catálogo de productos financieros y sus líneas de crédito. Permite definir parámetros (amortización, cuotas, tasa, capital, gastos, IVA) que luego se usan al originar créditos. Cada línea calcula automáticamente **TNA** (Tasa Nominal Anual) y **CFT** (Costo Financiero Total) a partir de tipo_amortizacion, tasa y gastos. **IVA** (default 21%) aplica solo a intereses y gastos. Módulo de **configuración**.
+## Descripción
 
----
+Administración del catálogo de productos financieros y sus líneas de crédito. Permite definir parámetros (amortización, cuotas, tasa, capital, gastos) que luego se usan al originar créditos. Módulo de **configuración**.
 
-## Comportamiento declarado (Dimensión 2)
+## Modelo extendido
 
-- **Lee** — listado paginado, detalle producto con líneas
-- **Crea** — productos y líneas de crédito
-- **Modifica** — productos y líneas
-- **Elimina** — soft delete productos y líneas
-- **Expone data por API** — GET lineas/{id}/parametros para otros módulos (solicitud-credito, creditos)
+- **Modelo Devias:** Detalle con subentidades (producto + tabla de líneas).
+- **Referencia:** components/dashboard/order/ (detalle con items), customers/[id].
+- **Patrón listado:** Lista paginada (productos); lista simple de líneas por producto.
+- **Patrón:** Lista de productos → detalle producto con card + tabla de líneas y CRUD de líneas (modales).
 
----
+## API (BFF → Motor)
 
-## Motor — Datos (Dimensión 1)
+- GET/POST /api/productos-credito (lista paginada, crear producto).
+- GET/PATCH/DELETE /api/productos-credito/[id] (detalle con lineas, editar, eliminar).
+- GET/POST /api/productos-credito/[id]/lineas (listar/crear líneas).
+- GET/PATCH/DELETE /api/productos-credito/[id]/lineas/[lineaId].
+- GET /api/productos-credito/lineas/[lineaId]/parametros (para otros módulos).
 
-**Patrón:** Principal + detalle (producto + líneas)
+## Permisos
 
-### Tablas
+- `productos_credito`: read, create, update, delete.
+- `puedeHacer()` solo en `productos-credito-view.tsx` y `lineas-credito-view.tsx`. Tabla y modales reciben canCreate, canEdit, canDelete.
 
-| Tabla | Descripción | Relaciones |
-|-------|-------------|------------|
-| `productos_credito` | Producto financiero (plantilla) | — |
-| `lineas_credito` | Línea de crédito con parámetros | producto_id → productos_credito |
+## Contrato GET lineas/[lineaId]/parametros
 
-### Modelo SQLModel
+Endpoint para otros módulos (solicitud-credito, créditos). El BFF hace proxy a `GET /v1/productos-credito/lineas/{lineaId}/parametros`. La respuesta se tipa en ERP como `LineaCreditoParametros` en `productos-credito.types.ts` (tipo_amortizacion, cuotas_min/max, tasa_interes, capital_min/max, gastos, gastos_tipo, tasa_iva opcional). El Motor debe devolver un JSON que cumpla ese contrato.
 
-```python
-class ProductoCredito(SQLModel, table=True):
-    __tablename__ = "productos_credito"
-    id: uuid.UUID
-    nombre: str (unique)
-    descripcion: str | None
-    activo: bool
-    created_at, updated_at, deleted_at
+## IVA
 
-class LineaCredito(SQLModel, table=True):
-    __tablename__ = "lineas_credito"
-    id: uuid.UUID
-    producto_id: uuid.UUID  # FK productos_credito
-    nombre: str
-    tipo_amortizacion: frances | aleman | americano
-    cuotas_min, cuotas_max: int
-    tasa_interes: float  # TNA
-    capital_min, capital_max: float
-    gastos: float, gastos_tipo: fijo | porcentaje
-    tasa_iva: float  # default 21
-    tna, cft, cft_sin_iva: float  # calculados
-    activo: bool
-    created_at, updated_at, deleted_at
-```
-
-### Schemas
-
-ProductoCreditoCreate, ProductoCreditoUpdate, ProductoCreditoRead, ProductoCreditoReadWithLineas
-LineaCreditoCreate, LineaCreditoUpdate, LineaCreditoRead
-
-### Migración
-
-```
-migrations/versions/YYYYMMDD_add_productos_credito.py
-```
-
----
-
-## Motor — API (Dimensión 3)
-
-**Patrón:** CRUD estándar productos + CRUD lineas anidadas + endpoint parametros
-
-| Método | Ruta | Descripción | Auth |
-|--------|------|-------------|------|
-| GET | `/v1/productos-credito/` | Listado paginado | JWT |
-| POST | `/v1/productos-credito/` | Crear producto | JWT |
-| GET | `/v1/productos-credito/{id}` | Detalle con lineas | JWT |
-| PATCH | `/v1/productos-credito/{id}` | Actualizar producto | JWT |
-| DELETE | `/v1/productos-credito/{id}` | Soft delete producto | JWT |
-| GET | `/v1/productos-credito/lineas/{linea_id}/parametros` | Parámetros línea (consumo interno) | JWT |
-| GET | `/v1/productos-credito/{id}/lineas/` | Listar líneas | JWT |
-| POST | `/v1/productos-credito/{id}/lineas/` | Crear línea | JWT |
-| GET | `/v1/productos-credito/{id}/lineas/{linea_id}` | Detalle línea | JWT |
-| PATCH | `/v1/productos-credito/{id}/lineas/{linea_id}` | Actualizar línea | JWT |
-| DELETE | `/v1/productos-credito/{id}/lineas/{linea_id}` | Soft delete línea | JWT |
-
-### ListParams soportados
-
-```
-GET /v1/productos-credito/?page=1&size=25&sort=nombre&activo=true&nombre=...
-```
-
----
-
-## Motor — Reglas de negocio
-
-1. CFT y TNA se calculan al crear/editar línea (módulo cft.py).
-2. Validaciones: cuotas_min <= cuotas_max, capital_min <= capital_max; gastos porcentaje entre 0 y 100.
-3. Endpoint parametros devuelve LineaCreditoRead para consumo por solicitud-credito al convertir.
-
----
-
-## ERP — BFF (Dimensión 4)
-
-**Patrón:** Proxy puro
-
-- GET `/api/productos-credito?page=1&size=25` → Motor GET /v1/productos-credito/
-- POST `/api/productos-credito` → ProductoCreditoCreatePayload
-- GET/PATCH/DELETE `/api/productos-credito/[id]`
-- GET/POST `/api/productos-credito/[id]/lineas`
-- GET/PATCH/DELETE `/api/productos-credito/[id]/lineas/[lineaId]`
-- GET `/api/productos-credito/lineas/[lineaId]/parametros` → para otros módulos
-
----
-
-## ERP — Root URL (Dimensión 5)
-
-**Patrón:** List + detail (producto con líneas)
-
-```
-/app/productos-credito         ← listado paginado
-/app/productos-credito/[id]    ← detalle producto + tabla líneas + CRUD líneas (modales)
-```
-
----
-
-## ERP — Frontend (Dimensión 6)
-
-**Modelo Devias:** Detalle con subentidades (producto + tabla de líneas)
-**Referencia:** components/dashboard/order/ (detalle con items), customers/[id]
-**Patrón listado:** Lista paginada (productos); lista simple de líneas por producto
-
-### Estructura de archivos
-
-```
-src/
-├── app/
-│   ├── (private)/app/productos-credito/
-│   │   ├── page.tsx
-│   │   └── [id]/page.tsx
-│   └── api/productos-credito/
-│       ├── route.ts
-│       ├── [id]/route.ts
-│       ├── [id]/lineas/route.ts
-│       ├── [id]/lineas/[lineaId]/route.ts
-│       └── lineas/[lineaId]/parametros/route.ts
-└── components/productos-credito/
-    ├── productos-credito-view.tsx
-    ├── productos-credito.types.ts
-    ├── producto-credito-detail-view.tsx
-    ├── lineas-credito-view.tsx
-    ├── lineas-credito-table.tsx
-    ├── linea-credito-crear-modal.tsx
-    ├── linea-credito-editar-modal.tsx
-    └── use-productos-credito.ts
-```
-
-### CFT, TNA e IVA (líneas)
-
-- **TNA**: Tasa Nominal Anual — derivado de tasa_interes (ya es anual). Campo calculado, solo lectura.
-- **CFT**: Costo Financiero Total efectivo anual — incluye intereses + gastos + IVA. BCRA exige 2 decimales.
-- **CFT sin IVA**: Opcional, para transparencia BCRA.
-- **tasa_iva**: Porcentaje IVA (default 21) — aplica solo a intereses y gastos.
-
----
-
-## Permisos RBAC (Dimensión 7)
-
-**Patrón:** CRUD básico
-
-`puedeHacer('productos_credito', 'read')`, `puedeHacer('productos_credito', 'create')`, `puedeHacer('productos_credito', 'update')`, `puedeHacer('productos_credito', 'delete')`
-
-Pasar `canCreate`, `canEdit`, `canDelete` a hijos. Solo en `productos-credito-view.tsx` y `lineas-credito-view.tsx`.
-
----
-
-## Decisiones técnicas
-
-- Motor es fuente única de CFT/TNA; líneas consumidas por solicitud-credito al convertir (GET parametros).
-- Credito y SolicitudCredito: producto_credito_id y linea_credito_id. Cuando hay línea, convertir usa parametros para generar cuotas con IVA.
-
----
-
-## Mejoras posibles
-
-- Wizard crédito: migrar de tasas a líneas cuando se implemente flujo por línea.
-- Permisos granulares por línea si se requiere.
-
----
+La línea puede tener `tasa_iva` (porcentaje, ej. 21). Se aplica a gastos e intereses. Cómo se refleje en cuotas y créditos (importe_iva, etc.) lo implementan otros módulos; este módulo solo define y muestra el campo en la línea y lo expone en GET parametros.
 
 ## Pendiente por repo
 
-- **Motor:** Ejecutar migración `alembic upgrade head` cuando la base esté disponible.
-- **Credinter / sync:** Incluir `linea_credito_id` en el payload de solicitudes cuando corresponda.
-- **ERP:** En el flujo de convertir, permitir elegir línea si la solicitud no trae `linea_credito_id`.
+- **Motor:** Exponer `GET /v1/productos-credito/lineas/{lineaId}/parametros` si no existe; persistir `tasa_iva` en líneas si no existe; respuesta según el tipo `LineaCreditoParametros` definido en ERP.
+- **Otro módulo (solicitud-credito / créditos):** Consumir el endpoint parametros y usar IVA en cuotas/créditos cuando se implemente el flujo por línea (fuera de este módulo).
 
----
+## Consumidores
 
-## Referencias
-
-| Regla | Contenido |
-|-------|-----------|
-| modules/solicitud-credito.mdc | Consume líneas al convertir |
-| modules/creditos.mdc | Referencia producto_credito_id, linea_credito_id |
+- Credito y SolicitudCredito siguen con `producto_credito_id`. Cuando el flujo de originación use líneas, se puede agregar `linea_credito_id` y consumir GET lineas/{id}/parametros.
+- El wizard de creación de crédito (credito-crear-wizard) aún referencia tasas; actualizar a lineas cuando se implemente el flujo por línea.
