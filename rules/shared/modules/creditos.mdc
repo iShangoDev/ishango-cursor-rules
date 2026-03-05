@@ -94,6 +94,34 @@ app/modules/creditos/
 - Pago parcial soportado; excedente → saldo a favor
 - Amortización francesa para cálculo de cuotas
 - `credinter_request_id` y `credinter_payment_id` UNIQUE nullable para idempotencia de sync
+- Estados de cuota soportados en operación: `pendiente`, `parcial`, `pagada`, `vencida`
+- La reconstrucción histórica de `pagos` se alinea contra `creditos` + `cuotas` vía `pago_eventos` (una imputación por cuota afectada)
+
+### Contrato funcional de chips (cierre UI)
+
+- Chip de crédito:
+  - `Activo`: está al día.
+  - `Vencido`: última cuota vencida sin pago.
+  - `Parcial`: última cuota vencida no cancelada con pago parcial.
+- Chip por cuota:
+  - `Activo`: cuota al día o cancelada.
+  - `Vencido`: cuota vencida sin pago.
+  - `Parcial`: cuota con pago parcial y saldo pendiente.
+- El filtro en listado de créditos debe operar por estos chips (`activo`, `vencido`, `parcial`).
+
+### Llaves y consistencia con pagos
+
+- PK `creditos.id` (UUID)
+- FK `creditos.persona_id` -> `personas.id`
+- Clave de negocio de crédito: `creditos.nro_credito` (unique)
+- Consistencia de pagos por crédito: la suma imputada en `pago_eventos` para cuotas del crédito debe reconciliar con estados/montos en `cuotas`
+- Referencia funcional del módulo de pagos: ver `modules/pagos.mdc`
+
+### Canal de pagos: migración y bulk
+
+- `pagos.canal` se incorpora por migración Alembic (referencia operativa: `20260305_028_pagos_add_canal.py`)
+- Para saneamiento/migración se permite método **bulk** (rebuild transaccional + carga masiva), con evidencia before/after
+- Para operación online futura, la deduplicación por llave de negocio se define en `modules/pagos.mdc`
 
 ---
 
@@ -160,8 +188,46 @@ src/
 │   ├── credito-crear-wizard.tsx       ← wizard crear préstamo (simular → confirmar)
 │   ├── imputar-view.tsx               ← wizard imputar CSV (upload → preview → confirm → resultado)
 │   ├── creditos.types.ts              ← tipos TS (espejo Motor)
+│   ├── creditos-query-key.ts          ← query keys (evitar dependencia circular con use-creditos)
 │   └── use-creditos.ts                ← mutations BFF
 ```
+
+---
+
+## Modelo de implementación estable (referencia para otros módulos)
+
+Patrón validado para vista de detalle sin "Element type is invalid" ni hydration mismatch. **Usar como modelo** al implementar detalle en otros módulos (ej. órdenes, facturas con subentidades).
+
+### Page Server Component (`[id]/page.tsx`)
+
+- **Next.js 15:** `params` es una Promise. Resolver en el Server Component: `const { id } = await params`; no pasar `params` al Client.
+- Pasar solo `creditoId: string` al Client Component; envolver en `<Suspense>` con fallback skeleton.
+- Si `!id` → `notFound()`.
+
+### Client Component de detalle (`credito-detail-page.tsx`)
+
+- Recibe `creditoId: string`. Un solo fetch: GET `/api/creditos/[id]/detalle`.
+- Manejar estados: loading, error (incl. SESSION_EXPIRED), éxito. En éxito validar `payload.credito` antes de renderizar la vista.
+- No usar iconos Phosphor en este árbol (ver abajo).
+
+### Iconos y SSR/hydration
+
+- **Cero Phosphor en vistas de detalle** (o en cualquier Client Component que se hidrate en rutas dinámicas): los imports desde `@phosphor-icons/react` pueden resolver a `undefined` en SSR y provocar "Element type is invalid".
+- En detalle y tablas hijas (ej. `credito-detail-view.tsx`, `cuotas-table.tsx`): usar texto, Unicode (▶/▼) o MUI icons; no Phosphor en ese árbol.
+- **Layout global:** componentes como LanguageSwitch no deben usar `alt`/`src` que dependan de locale en el primer render (server vs client distinto → hydration mismatch). Usar mismo valor server y client o montar bandera solo en cliente.
+
+### BFF y datos
+
+- Un solo endpoint agregado en Motor: `GET /v1/creditos/{id}/detalle` → `{ credito, cuotas, pagos, persona }`.
+- BFF: proxy puro a ese endpoint; `try/catch` en `res.json()` y respuesta JSON consistente para no disparar error boundary en cliente.
+
+### Dependencias circulares
+
+- Si `creditos-view` (o lista) y `use-creditos` se referencian entre sí, extraer query keys a `creditos-query-key.ts` e importar desde ahí en ambos.
+
+### Componentes MUI
+
+- `PropertyList` (Devias): `divider` debe ser `ReactElement` (ej. `<Divider flexItem />`), no `boolean`.
 
 ---
 

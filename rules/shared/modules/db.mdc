@@ -1,0 +1,96 @@
+---
+description: Mapa DB modular — PK/FK y llaves funcionales de Motor
+globs: [
+  "app/modules/**/*.py",
+  "migrations/versions/**/*.py",
+  "scripts/**/*.py"
+]
+---
+
+# DB modular — iShango Motor
+
+Documento de referencia transversal para diseño de esquema, relaciones y llaves por módulo.
+
+## Principio base
+
+- Motor es la única fuente de datos para personas, créditos, cuotas y pagos.
+- Flujo obligatorio de capas: Router -> Service -> Repository -> DB.
+
+---
+
+## Módulo Personas
+
+### Tabla `personas`
+
+- PK: `id` (UUID)
+- Claves funcionales:
+  - `documento` (único de negocio en operación)
+  - `(legajo, documento)` para migraciones legacy cuando aplica
+- Campos relevantes de saneamiento: `telefono`, `celular`, `telefono_secundario`, `direccion`, `localidad`, `partido`, `provincia`, `codigo_postal`
+
+### Relaciones
+
+- 1 persona -> N créditos (`creditos.persona_id`)
+
+---
+
+## Módulo Créditos
+
+### Tabla `creditos`
+
+- PK: `id` (UUID)
+- FK: `persona_id` -> `personas.id`
+- Clave funcional: `nro_credito` (unique)
+
+### Tabla `cuotas`
+
+- PK: `id` (UUID)
+- FK: `credito_id` -> `creditos.id`
+- Clave funcional: `(credito_id, numero)`
+- Estados operativos: `pendiente`, `parcial`, `pagada`, `vencida`
+
+---
+
+## Módulo Pagos
+
+### Tabla `pagos`
+
+- PK: `id` (UUID)
+- FK: `credito_id` -> `creditos.id`
+- Id legado opcional: `credinter_payment_id` (unique nullable)
+- Campo de origen: `canal` (agregado por migración)
+- Campo operativo: `metodo`
+
+### Tabla `pago_eventos`
+
+- PK: `id` (UUID)
+- FK: `pago_id` -> `pagos.id`
+- FK: `cuota_id` -> `cuotas.id`
+- Registra imputación por cuota afectada
+
+### Reglas de llave
+
+- Saneamiento/reconstrucción actual: no usar deduplicación por llave de negocio.
+- Operación futura módulo pagos:
+  1. usar `credinter_payment_id` si existe
+  2. fallback `fecha + importe + canal + dni + nro_credito`
+
+### Canal y método bulk
+
+- `canal` es obligatorio para trazabilidad de origen.
+- Para migraciones/saneamiento se admite método **bulk** transaccional con:
+  - backup previo
+  - rebuild `pagos` + `pago_eventos`
+  - conciliación final por crédito/cuota
+- Cierre operativo acordado para tabla `pagos` completa:
+  - `canal = 'bulk_migracion'` en 100% de filas
+  - `metodo = 'migracion'` en 100% de filas
+
+---
+
+## Checklist mínimo de consistencia DB
+
+- No hay cuotas `pagada/parcial` sin imputación en `pago_eventos`.
+- Suma imputada por crédito reconcilia con estados/montos de cuotas.
+- PK/FK sin violaciones.
+- Evidencia before/after en cada ejecución de saneamiento.

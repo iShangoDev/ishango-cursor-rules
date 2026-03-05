@@ -1,0 +1,117 @@
+---
+description: Agente Módulo Pagos — aplica cuando Cursor edita flujos de pagos/imputación en ERP o Motor
+globs: [
+  "src/components/pagos/**/*.tsx",
+  "src/components/pagos/**/*.ts",
+  "src/app/(private)/app/pagos/**/*.tsx",
+  "src/app/api/pagos/**/*.ts",
+  "src/components/creditos/**/*imput*.tsx",
+  "src/app/api/creditos/**/pagos*.ts",
+  "app/modules/creditos/**/*.py"
+]
+---
+
+# Módulo Pagos — iShango Sistema
+
+Gestión de pagos e imputación sobre cuotas/créditos. La fuente operativa es Motor.
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Crea** — alta de pago e imputación
+- **Modifica** — ajuste de imputación y metadatos operativos
+- **Lee** — consulta de pagos e historial
+- **Recibe** — importación/sync de pagos externos
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Principal + detalle
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `pagos` | Cabecera del pago | FK `credito_id` -> `creditos.id` |
+| `pago_eventos` | Imputación por cuota afectada | FK `pago_id` -> `pagos.id`, FK `cuota_id` -> `cuotas.id` |
+
+### Llaves
+
+- PK `pagos.id` (UUID)
+- PK `pago_eventos.id` (UUID)
+- FK `pagos.credito_id` -> `creditos.id`
+- FK `pago_eventos.pago_id` -> `pagos.id`
+- FK `pago_eventos.cuota_id` -> `cuotas.id`
+- Id legado opcional: `pagos.credinter_payment_id` (unique nullable)
+
+---
+
+## Reglas de imputación (obligatorias)
+
+### Pago parcial
+
+Si el monto imputado no cubre la cuota completa:
+
+- cuota queda en `parcial`
+- saldo pendiente se mantiene
+- un pago posterior suma imputación hasta cancelar o mantener parcial
+
+### Pago en cascada
+
+Si el monto excede saldo de una cuota:
+
+- se cancela cuota actual
+- el excedente se aplica a la siguiente cuota pendiente
+- se repite hasta agotar monto
+- se registra una línea por cuota afectada en `pago_eventos`
+
+---
+
+## Regla de llaves (AHORA vs FUTURO)
+
+### Reconstrucción/saneamiento actual
+
+- No aplicar deduplicación por llave de negocio.
+- Prioridad: consistencia contable entre `creditos`, `cuotas`, `pagos`, `pago_eventos`.
+- Método permitido: **bulk transaccional** con evidencia before/after.
+
+### Operación futura (módulo pagos)
+
+Aplicar deduplicación al ingresar pagos online/import:
+
+1. Llave por id legado (`credinter_payment_id`) si existe.
+2. Fallback por combinación: `fecha + importe + canal + dni + nro_credito`.
+
+---
+
+## Canal de pagos: migración y método bulk
+
+- `pagos.canal` es columna requerida para trazabilidad por origen.
+- Incorporación por migración Alembic (referencia operativa: `20260305_028_pagos_add_canal.py`).
+- Cierre de saneamiento global: todos los registros de `pagos` deben quedar con:
+  - `canal = 'bulk_migracion'`
+  - `metodo = 'migracion'`
+- Para volumen alto, usar modo **bulk**:
+  - reconstrucción transaccional de `pagos` + `pago_eventos`
+  - validación de reconciliación por crédito
+  - registro de backup y métricas de cierre
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD + acciones de negocio
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| POST | `/v1/pagos/imputar` | Imputar pago a cuotas | ✅ JWT |
+| GET | `/v1/creditos/{id}/detalle` | Leer pagos/imputaciones por crédito | ✅ JWT |
+| POST | `/v1/credinter/pago` | Sync pago externo | API Key |
+
+---
+
+## Decisiones técnicas
+
+- `pago_eventos` es la verdad de imputación por cuota.
+- Las vistas de pagos deben reconciliar contra `cuotas` y no solo contra cabecera `pagos`.
+- En saneamientos, primero consistencia; deduplicación por llave queda para flujo online futuro.

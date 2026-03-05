@@ -30,7 +30,7 @@ Gestión de personas físicas del sistema. Entidad base que otros módulos refer
 
 | Tabla | Descripción | Relaciones |
 |-------|-------------|------------|
-| `personas` | Persona física con datos de identificación y contacto | — |
+| `personas` | Persona física con datos de identificación y contacto | 1:N con `creditos` |
 
 ### Modelo SQLModel
 
@@ -137,6 +137,13 @@ app.include_router(personas_router, prefix="/v1")
 6. `updated_at` se actualiza en cada PATCH
 7. Todos los endpoints requieren token JWT válido (`Authorization: Bearer`)
 8. `nombre` y `apellido` son obligatorios — no pueden quedar vacíos en PATCH
+9. Para migraciones legacy (TXT), la resolución puede usar clave compuesta `(legajo, documento)` cuando aplique
+
+### Relación con módulos financieros
+
+- `creditos.persona_id` referencia `personas.id`
+- `pagos` se vincula a la persona de forma indirecta vía `creditos` (`pagos.credito_id` -> `creditos.id` -> `personas.id`)
+- Datos de contacto/domicilio de `personas` son insumo de conciliación y trazabilidad en procesos bulk de migración
 
 ### Archivos del módulo Motor
 
