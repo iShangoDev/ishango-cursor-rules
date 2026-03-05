@@ -35,13 +35,11 @@ El agente ejecuta solo los comandos definidos aquí.
 
 ### Deploy
 
-7. El deploy lo hace GitHub Actions al push a main. El agente no ejecuta el deploy.
+7. El deploy lo hace GitHub Actions al push a main (pull, build, `alembic upgrade head`, health interno). El agente no ejecuta el deploy.
 
 ### Validación post-deploy (cierra el flujo)
 
-8. El agente ejecuta validación por SSH: `ssh deploy@159.89.89.130`
-9. En la sesión SSH: `cd /app/ishango-motor && git pull && restart`
-10. El agente comprueba que el servicio responde (p. ej. `curl` a `http://localhost:8001/health` o el endpoint que use el Motor). Si devuelve 200, el flujo se da por cerrado.
+8. El agente comprueba que el Motor responde: `Invoke-WebRequest -Uri "http://159.89.89.130:8001/health" -UseBasicParsing` (PowerShell). Si devuelve 200, el flujo se da por cerrado.
 
 ---
 
