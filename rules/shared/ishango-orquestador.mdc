@@ -40,6 +40,7 @@ Cuando Cursor detecta archivos de un módulo, activa el .mdc correspondiente:
 | `*/personas/**` | `.cursor/rules/modules/personas.mdc` |
 | `*/creditos/**` | `.cursor/rules/modules/creditos.mdc` |
 | `*/solicitud-credito/**` | `.cursor/rules/modules/solicitud-credito.mdc` |
+| `*/productos-credito/**` | `.cursor/rules/modules/productos-credito.mdc` |
 | `*/linea-credito/**` | `.cursor/rules/modules/linea-credito.mdc` |
 | `*/usuarios/**` | `.cursor/rules/modules/usuarios.mdc` |
 | `*/auth/**` | `.cursor/rules/modules/auth.mdc` |

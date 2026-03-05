@@ -36,6 +36,7 @@ Ver `docs/investigacion/20260302-solicitud-credito-modulo.md`, `docs/IMPLEMENTAC
 | `nro_credito` | Número de crédito |
 | `monto`, `cantidad_cuotas`, `importe_cuota`, `tasa_mensual` | Datos del préstamo |
 | `producto_credito_id` | nullable |
+| `linea_credito_id` | nullable, FK a lineas_credito |
 | `estado` | pending, convertido, rechazado |
 | `created_at`, `updated_at` | Auditoría |
 
@@ -62,6 +63,15 @@ Sync Credinter: `POST /v1/credinter/solicitud` inserta en `solicitudes_credito` 
 - Las solicitudes viven en `solicitudes_credito`; las cuotas solo en `creditos`/`cuotas` tras convertir.
 - Idempotencia sync por `credinter_request_id`.
 - `credinter_request_data` contiene persona + crédito en formato Credinter.
+
+### Consumo de líneas de productos-credito
+
+- La solicitud puede tener `linea_credito_id` (FK a `lineas_credito`).
+- Al ejecutar **Convertir**, si `linea_credito_id` está presente:
+  - El Motor llama `GET /v1/productos-credito/lineas/{lineaId}/parametros`.
+  - Obtiene: `tipo_amortizacion`, `tasa_iva`, `tna`, `cft`, `gastos`, `cuotas_min/max`, `capital_min/max`.
+  - Genera cuotas con la amortización indicada y aplica IVA sobre intereses.
+- Si no hay `linea_credito_id`, se usa el flujo actual (frances, tasa de la solicitud).
 
 ---
 
@@ -119,11 +129,24 @@ src/
     └── solicitud-credito.types.ts       ← SolicitudCredito + CredinterRequestData + parseCredinterRequestData
 ```
 
+En la vista de detalle no usar Phosphor; usar texto, Unicode o MUI (ver Modelo de implementación estable más abajo).
+
 ### Tipos específicos
 
 - `SolicitudCredito`, `SolicitudCreditoEstado` — espejo del recurso Motor
 - `CredinterRequestData`, `CredinterRequestPersona`, `CredinterRequestCredito`, `CredinterRequestLineaPrestamo` — estructura de `credinter_request_data`
 - `parseCredinterRequestData()` — extrae datos de forma segura
+
+---
+
+## Modelo de implementación estable (referencia)
+
+Mismo patrón que créditos para evitar "Element type is invalid" y hydration mismatch. Ver **modules/creditos.mdc** (sección "Modelo de implementación estable") para el modelo completo.
+
+- **Page `[id]/page.tsx`:** `params` es una Promise (Next.js 15). Resolver con `const { id } = await params`. Si `!id` → `notFound()` antes del try.
+- **Vista de detalle:** No usar iconos Phosphor en este árbol; usar texto (ej. "← Solicitudes de crédito"), Unicode o MUI.
+- **PropertyList (Devias):** `divider` debe ser `ReactElement` (ej. `divider={<Divider flexItem />}`), no boolean.
+- **BFF GET [id]:** Envolver `response.json()` en try/catch; en error de parseo devolver 503 con cuerpo JSON para no disparar error boundary en cliente.
 
 ---
 
