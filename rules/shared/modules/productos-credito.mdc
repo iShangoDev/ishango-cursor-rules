@@ -38,9 +38,13 @@ Endpoint para otros módulos (solicitud-credito, créditos). El BFF hace proxy a
 
 La línea puede tener `tasa_iva` (porcentaje, ej. 21). Se aplica a gastos e intereses. Cómo se refleje en cuotas y créditos (importe_iva, etc.) lo implementan otros módulos; este módulo solo define y muestra el campo en la línea y lo expone en GET parametros.
 
+## TNA y CFT
+
+La línea puede incluir `tna` (Tasa Nominal Anual, %) y `cft` (Costo Financiero Total, %). Son calculados por el Motor al guardar (crear o editar) la línea; el ERP los muestra en la tabla de líneas. Si el Motor aún no los calcula, las columnas muestran "—".
+
 ## Pendiente por repo
 
-- **Motor:** Exponer `GET /v1/productos-credito/lineas/{lineaId}/parametros` si no existe; persistir `tasa_iva` en líneas si no existe; respuesta según el tipo `LineaCreditoParametros` definido en ERP.
+- **Motor:** Exponer `GET /v1/productos-credito/lineas/{lineaId}/parametros` si no existe; persistir `tasa_iva` en líneas si no existe; respuesta según el tipo `LineaCreditoParametros` definido en ERP. Agregar campos `tna` y `cft` en líneas; calcular TNA y CFT al crear/actualizar línea (metodología BCRA) y devolverlos en GET lista/detalle y en respuestas POST/PATCH. **Las APIs que exponen la línea (GET lista de líneas, GET línea por id, GET lineas/{id}/parametros) deben devolver todos los datos de la línea** (incluidos tna, cft, tasa_iva y el resto de campos del modelo).
 - **Otro módulo (solicitud-credito / créditos):** Consumir el endpoint parametros y usar IVA en cuotas/créditos cuando se implemente el flujo por línea (fuera de este módulo).
 
 ## Consumidores
