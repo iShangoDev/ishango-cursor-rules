@@ -263,7 +263,5 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 
 ## Pendiente por repo
 
-- **Pendiente en Motor:** —
-- **Pendiente en ERP:**
-  - Eliminar endpoint simular y wizard de creación manual: eliminar `src/app/api/creditos/simular/route.ts`; eliminar `src/components/creditos/credito-crear-wizard.tsx`; en `src/components/creditos/creditos-view.tsx` quitar el import y el uso de `CreditoCrearWizard` (y el botón/acción que abre el wizard). Con esta eliminación **no habrá creación manual de créditos** en el ERP hasta que se implemente un flujo alternativo (p. ej. modal o página que llame a POST /v1/creditos/ sin simular; o creación solo vía Credinter/solicitud-credito). El Motor mantiene POST /v1/creditos/ disponible. Opcional: si en el futuro se quiere simular antes de crear, la amortización francesa puede implementarse en frontend o BFF sin llamar al Motor.
-  - Mostrar columna IVA en la vista de cuotas.
+- **Pendiente en Motor:** Exponer campo `iva` en modelo Cuota y schema CuotaRead (columna ya existe en DB por migración 034).
+- **Pendiente en ERP:** —
