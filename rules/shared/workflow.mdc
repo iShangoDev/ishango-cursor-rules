@@ -47,9 +47,11 @@ El agente ejecuta solo los comandos definidos aquí.
 
 **Condición:** El agente solo edita reglas cuando el usuario pide cambiar reglas.
 
+**Regla .mdc:** Los archivos `.mdc` se editan **siempre** en shared (`C:\dev\ishango-cursor-rules`). No editar `.cursor/rules/` en ERP ni en Motor; son salida del sync.
+
 ### Orden (obligatorio)
 
-11. Editar en `C:\dev\ishango-cursor-rules`
+11. Editar en `C:\dev\ishango-cursor-rules` (shared)
 12. Sincronizar: desde `C:\dev\ishango-cursor-rules` ejecutar `.\sync-cursor.ps1` (copia a carpetas locales de ERP y Motor; no hace git)
 13. En ishango-cursor-rules: `git add .` → `git commit -m "..."` → `git push`
 14. En iShangoERP (solo .cursor/): `cd c:\dev\iShangoERP` → `git add .cursor/` → `git commit -m "sync: ..."` → `git push origin develop`

@@ -44,6 +44,10 @@ Si hay conflicto entre docs/ y `.cursor/rules/`, prevalece `.cursor/rules/`.
 
 **Regla:** NO usar _template para crear módulos; extender desde el modelo del diccionario.
 
+### Registro reciente (cambios en reglas shared)
+
+- **creditos.mdc (Pendiente por repo):** iva en Cuota/CuotaRead ya implementado; Pendiente en Motor vacío. Pendiente en ERP: consumir `GET /v1/pagos/{id}`, wizard y CSV según doc pagos. Pendiente para Credinter: bulk y CSV; no usar pago único.
+
 ### Archivos archivados (ERP — .cursor/rules/archive/)
 
 | Archivo | Motivo |

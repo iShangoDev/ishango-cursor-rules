@@ -461,8 +461,7 @@ Si el módulo depende de trabajo en el otro repo, listar aquí para que quede vi
 
 ## Workflow — Actualizar .mdc de módulo
 
-Los archivos `.cursor/rules/` en ERP y Motor son **outputs** del repo `ishango-cursor-rules`.
-No editar directamente en ERP ni en Motor.
+**Regla:** Los `.mdc` se trabajan **siempre** en shared (`C:\dev\ishango-cursor-rules`). El sync los distribuye a ERP y Motor. No editar `.cursor/rules/` en ERP ni en Motor.
 
 ```powershell
 # 1. Editar el .mdc en ishango-cursor-rules
