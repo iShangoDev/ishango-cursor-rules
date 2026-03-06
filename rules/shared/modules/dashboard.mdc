@@ -1,0 +1,99 @@
+---
+description: Agente Módulo Dashboard — vista post-login que muestra métricas y gráficos agregados desde varios módulos del Motor.
+globs: [
+  "src/app/(private)/app/page.tsx",
+  "src/app/api/dashboard/**/*.ts",
+  "src/components/dashboard/overview/**/*.tsx",
+  "src/components/dashboard/overview/**/*.ts",
+  "src/lib/data/dashboard-server.ts"
+]
+---
+
+# Módulo Dashboard — iShango Sistema
+
+Vista principal tras el login (`/app`). No es un CRUD: **solo lee** datos ya expuestos por otros módulos y los presenta en cards, insight y gráficos.
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Lee** — consulta totales y agregaciones por estado para mostrar métricas y gráficos. No crea, modifica ni elimina entidades propias.
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** El Motor **no tiene** un módulo "dashboard" ni tabla propia. El dashboard consume endpoints existentes de otros módulos.
+
+- Totales: listados paginados con `page=1&size=1` (personas, creditos, pagos, solicitud-credito, usuarios, productos-credito).
+- Por estado: créditos (`?estado=activo|vencido|cancelado|parcial|pending`), solicitudes (`?estado=pending|convertido|rechazado`).
+
+Opcional a futuro: filtros de fecha en pagos/cuotas, o endpoint de agregación (p. ej. cuotas vencidas, pagos por mes) para Insight / InboundOutbound.
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** Sin API propia de dashboard. Se usan:
+
+- `GET /v1/personas/?page=1&size=1` (y análogos para creditos, pagos, solicitud-credito, usuarios, productos-credito).
+- `GET /v1/creditos/?estado=X&page=1&size=1` para cada estado.
+- `GET /v1/solicitud-credito/?estado=X&page=1&size=1` para cada estado.
+
+`CreditoEstado` en el Motor incluye activo, vencido, cancelado, parcial, pending.
+
+---
+
+## Motor — Reglas de negocio
+
+- Ninguna específica del "dashboard"; se aplican las de cada recurso consultado (auth, permisos por módulo).
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy + agregación.
+
+- **GET /api/dashboard/stats** — agrega múltiples llamadas al Motor (totales + conteos por estado), devuelve `DashboardStats`. Pensado para uso desde cliente si se necesita; la page no lo usa para el render inicial.
+- La **page** obtiene los datos vía **getDashboardStatsServer()** (mismo request, motorFetch con cookies) para evitar fetch interno sin cookie en Vercel.
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+- **/app** — única ruta del "módulo" dashboard (overview post-login). Definida en `paths.dashboard.overview`.
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo:** Vista de métricas (patrón tipo analytics). No listado CRUD.
+
+**Estructura:**
+
+- **page.tsx:** Server Component. getSessionServer(), getDashboardStatsServer(), filtra por permisos (solo módulos con read), arma stats/insights y pasa a DashboardOverviewView. Si getDashboardStatsServer() devuelve null y hay links permitidos → "Sistema no disponible".
+- **DashboardOverviewView:** Client Component. Recibe stats, links, insights, creditosPorEstado, solicitudesPorEstado, canShowCreditosCharts, canShowSolicitudesCharts. Renderiza en orden: Summary (cards con enlace por módulo), Insight (solicitudes pendientes / créditos en mora), gráfico barras créditos por estado, donut créditos por estado, gráfico barras solicitudes por estado.
+- **Componentes reutilizados:** Summary (overview), Insight, ChannelSessionsVsBounce, Devices (analytics). Tipos en dashboard-overview.types.ts.
+
+**Fuente de datos en servidor:** `src/lib/data/dashboard-server.ts` — getDashboardStatsServer() usa motorFetch (cookies del request). Mismo patrón que roles-server, personas-server.
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+- Solo **lectura**. No hay create/edit/delete de "dashboard".
+- Qué se muestra se decide por **session.modulos** (read por módulo): solo se incluyen en stats/links/insights/charts los módulos donde el usuario tiene permiso `read` (personas, creditos, pagos, solicitud_credito, usuarios, productos_credito). Gráficos de créditos solo si canRead("creditos"); gráficos de solicitudes solo si canRead("solicitud_credito").
+
+---
+
+## Decisiones técnicas
+
+- Datos iniciales del dashboard se obtienen en servidor con **getDashboardStatsServer()** (motorFetch), no con fetch a /api/dashboard/stats, para que las cookies de sesión estén disponibles en el mismo request (evita "Sistema no disponible" en previews Vercel).
+- El BFF /api/dashboard/stats se mantiene para posible uso desde cliente (p. ej. refresco o otras vistas).
+- Tipos compartidos: DashboardStats, CreditosPorEstado, SolicitudesPorEstado en dashboard-overview.types.ts; el BFF exporta sus propios tipos compatibles.
+
+---
+
+## Mejoras posibles
+
+- InboundOutbound (pagos/desembolsos por mes) cuando el Motor exponga agregación temporal o filtros de fecha.
+- Insight "pagos vencidos en el mes" si el Motor expone filtro por vencimiento en cuotas/pagos.
+- Endpoint opcional en Motor tipo GET /v1/dashboard/stats para reducir N llamadas desde el BFF/dashboard-server.
