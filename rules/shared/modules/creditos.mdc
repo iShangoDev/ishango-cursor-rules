@@ -263,5 +263,6 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 
 ## Pendiente por repo
 
-- **Pendiente en Motor:** Exponer campo `iva` en modelo Cuota y schema CuotaRead (columna ya existe en DB por migración 034).
-- **Pendiente en ERP:** —
+- **Pendiente en Motor:** — (campo `iva` en Cuota/CuotaRead ya implementado; definiciones de pagos 22–26 realizadas.)
+- **Pendiente en ERP:** Cambios derivados de las definiciones de pagos: consumir `GET /v1/pagos/{id}` cuando se necesite detalle con eventos; wizard imputar y CSV según `docs/creditos/pagos-identificacion-imputacion.md`.
+- **Pendiente para Credinter:** Consumir bulk (`POST /v1/credinter/pagos`) y CSV según doc; no usar pago único (`POST /v1/credinter/pago`) — usar solo bulk o CSV.
