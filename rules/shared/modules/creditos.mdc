@@ -186,7 +186,6 @@ src/
 │   ├── credito-form.tsx               ← form crear/editar
 │   ├── credito-crear-modal.tsx        ← modal crear
 │   ├── credito-editar-modal.tsx       ← modal editar
-│   ├── credito-crear-wizard.tsx       ← (pendiente eliminar en ERP; Motor ya no expone POST /simular)
 │   ├── imputar-view.tsx               ← wizard imputar CSV (upload → preview → confirm → resultado)
 │   ├── creditos.types.ts              ← tipos TS (espejo Motor)
 │   ├── creditos-query-key.ts          ← query keys (evitar dependencia circular con use-creditos)
@@ -249,6 +248,7 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 - Errores: BFF devuelve siempre JSON (try/catch en res.json()); cliente no re-lanza para no disparar error boundary.
 - Prefetch: `creditosQueryKey.list({ page: 1, size: 25 })` en `use-prefetch-module.ts` (patrón paginado como personas)
 - Wizard imputar: upload CSV → preview → confirm → resultado (no modal simple)
+- Creación de crédito: modal + form (`credito-crear-modal.tsx` + `CreditoForm`); no existe wizard de simulación (Motor no expone POST /simular).
 - Ver `docs/IMPLEMENTACION-HU1-ENVIAR-A-ERP.md` para flujo Credinter → solicitud crédito
 
 ---
