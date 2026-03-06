@@ -265,4 +265,4 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 ## Pendiente por repo
 
 - **Pendiente en Motor:** —
-- **Pendiente en ERP:** —
+- **Pendiente en ERP:** Mostrar columna IVA en la vista de cuotas.
