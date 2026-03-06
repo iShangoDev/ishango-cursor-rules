@@ -1,4 +1,4 @@
-﻿---
+---
 description: Agente Módulo Créditos — aplica cuando Cursor edita archivos del módulo creditos en ERP o Motor
 globs: [
   "src/components/creditos/**/*.tsx",
@@ -80,7 +80,6 @@ app/modules/creditos/
 | DELETE | `/v1/creditos/{id}` | Soft delete | ✅ JWT |
 | GET | `/v1/creditos/{id}/detalle` | Detalle agregado (credito, cuotas, pagos, persona titular) | ✅ JWT |
 | GET | `/v1/creditos/{id}/cuotas` | Cuotas del crédito (ordenadas por número) | ✅ JWT |
-| POST | `/v1/creditos/simular` | Previsualización amortización francesa (sin persistir) | ✅ JWT |
 | POST | `/v1/creditos/existencia-batch` | Batch check IDs | ✅ JWT |
 | POST | `/v1/pagos/imputar` | Imputar pago a cuotas | ✅ JWT |
 | POST | `/v1/credinter/solicitud` | Sync desde Credinter (API Key) | API Key |
@@ -187,7 +186,7 @@ src/
 │   ├── credito-form.tsx               ← form crear/editar
 │   ├── credito-crear-modal.tsx        ← modal crear
 │   ├── credito-editar-modal.tsx       ← modal editar
-│   ├── credito-crear-wizard.tsx       ← wizard crear préstamo (simular → confirmar)
+│   ├── credito-crear-wizard.tsx       ← (pendiente eliminar en ERP; Motor ya no expone POST /simular)
 │   ├── imputar-view.tsx               ← wizard imputar CSV (upload → preview → confirm → resultado)
 │   ├── creditos.types.ts              ← tipos TS (espejo Motor)
 │   ├── creditos-query-key.ts          ← query keys (evitar dependencia circular con use-creditos)
@@ -265,4 +264,6 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 ## Pendiente por repo
 
 - **Pendiente en Motor:** —
-- **Pendiente en ERP:** Mostrar columna IVA en la vista de cuotas.
+- **Pendiente en ERP:**
+  - Eliminar endpoint simular y wizard de creación manual: eliminar `src/app/api/creditos/simular/route.ts`; eliminar `src/components/creditos/credito-crear-wizard.tsx`; en `src/components/creditos/creditos-view.tsx` quitar el import y el uso de `CreditoCrearWizard` (y el botón/acción que abre el wizard). Con esta eliminación **no habrá creación manual de créditos** en el ERP hasta que se implemente un flujo alternativo (p. ej. modal o página que llame a POST /v1/creditos/ sin simular; o creación solo vía Credinter/solicitud-credito). El Motor mantiene POST /v1/creditos/ disponible. Opcional: si en el futuro se quiere simular antes de crear, la amortización francesa puede implementarse en frontend o BFF sin llamar al Motor.
+  - Mostrar columna IVA en la vista de cuotas.
