@@ -5,7 +5,8 @@ globs: [
   "src/app/api/dashboard/**/*.ts",
   "src/components/dashboard/overview/**/*.tsx",
   "src/components/dashboard/overview/**/*.ts",
-  "src/lib/data/dashboard-server.ts"
+  "src/lib/data/dashboard-server.ts",
+  "app/modules/dashboard/**/*.py"
 ]
 ---
 
@@ -21,24 +22,21 @@ Vista principal tras el login (`/app`). No es un CRUD: **solo lee** datos ya exp
 
 ## Motor — Datos (Dimensión 1)
 
-**Patrón:** El Motor **no tiene** un módulo "dashboard" ni tabla propia. El dashboard consume endpoints existentes de otros módulos.
+**Patrón:** El Motor **no tiene** tabla propia para dashboard. El módulo `app/modules/dashboard/` orquesta conteos desde repos/servicios existentes (personas, creditos, pagos, solicitud_credito, usuarios, productos_credito).
 
-- Totales: listados paginados con `page=1&size=1` (personas, creditos, pagos, solicitud-credito, usuarios, productos-credito).
-- Por estado: créditos (`?estado=activo|vencido|cancelado|parcial|pending`), solicitudes (`?estado=pending|convertido|rechazado`).
-
-Opcional a futuro: filtros de fecha en pagos/cuotas, o endpoint de agregación (p. ej. cuotas vencidas, pagos por mes) para Insight / InboundOutbound.
+- **GET /v1/dashboard/stats** devuelve en una respuesta: totales (personas, creditos, pagos, solicitud_credito, usuarios, productos_credito), solicitudes_pendientes, creditos_en_mora, creditos_por_estado, solicitudes_por_estado.
+- Opcional a futuro: filtros de fecha en pagos/cuotas, o agregación (cuotas vencidas, pagos por mes) para Insight / InboundOutbound.
 
 ---
 
 ## Motor — API (Dimensión 3)
 
-**Patrón:** Sin API propia de dashboard. Se usan:
+**Patrón:** Endpoint agregado para el dashboard. El ERP usa una sola llamada.
 
-- `GET /v1/personas/?page=1&size=1` (y análogos para creditos, pagos, solicitud-credito, usuarios, productos-credito).
-- `GET /v1/creditos/?estado=X&page=1&size=1` para cada estado.
-- `GET /v1/solicitud-credito/?estado=X&page=1&size=1` para cada estado.
+- **GET /v1/dashboard/stats** (JWT) — devuelve totales y conteos por estado en una respuesta (snake_case). Respuesta: personas, creditos, pagos, solicitud_credito, usuarios, productos_credito, solicitudes_pendientes, creditos_en_mora, creditos_por_estado, solicitudes_por_estado.
+- Los listados por recurso (personas, creditos, pagos, etc.) siguen disponibles para otros usos; el dashboard ya no los llama en N requests.
 
-`CreditoEstado` en el Motor incluye activo, vencido, cancelado, parcial, pending.
+`CreditoEstado`: activo, vencido, cancelado, parcial, pending. `SolicitudCreditoEstado`: pending, convertido, rechazado.
 
 ---
 
@@ -50,10 +48,10 @@ Opcional a futuro: filtros de fecha en pagos/cuotas, o endpoint de agregación (
 
 ## ERP — BFF (Dimensión 4)
 
-**Patrón:** Proxy + agregación.
+**Patrón:** Proxy al Motor.
 
-- **GET /api/dashboard/stats** — agrega múltiples llamadas al Motor (totales + conteos por estado), devuelve `DashboardStats`. Pensado para uso desde cliente si se necesita; la page no lo usa para el render inicial.
-- La **page** obtiene los datos vía **getDashboardStatsServer()** (mismo request, motorFetch con cookies) para evitar fetch interno sin cookie en Vercel.
+- **GET /api/dashboard/stats** — forwardea a **GET /v1/dashboard/stats**, mapea la respuesta (snake_case → camelCase) y devuelve `DashboardStats`. Uso desde cliente (p. ej. refresco).
+- La **page** obtiene los datos vía **getDashboardStatsServer()**, que llama una vez a GET /v1/dashboard/stats (motorFetch con cookies) para el render inicial.
 
 ---
 
@@ -86,8 +84,8 @@ Opcional a futuro: filtros de fecha en pagos/cuotas, o endpoint de agregación (
 
 ## Decisiones técnicas
 
-- Datos iniciales del dashboard se obtienen en servidor con **getDashboardStatsServer()** (motorFetch), no con fetch a /api/dashboard/stats, para que las cookies de sesión estén disponibles en el mismo request (evita "Sistema no disponible" en previews Vercel).
-- El BFF /api/dashboard/stats se mantiene para posible uso desde cliente (p. ej. refresco o otras vistas).
+- Datos iniciales del dashboard se obtienen en servidor con **getDashboardStatsServer()**, que llama una vez a **GET /v1/dashboard/stats** (motorFetch con cookies), para que la sesión esté disponible en el mismo request (evita "Sistema no disponible" en previews Vercel).
+- El BFF GET /api/dashboard/stats proxy a GET /v1/dashboard/stats para uso desde cliente (refresco u otras vistas).
 - Tipos compartidos: DashboardStats, CreditosPorEstado, SolicitudesPorEstado en dashboard-overview.types.ts; el BFF exporta sus propios tipos compatibles.
 
 ---
@@ -96,4 +94,4 @@ Opcional a futuro: filtros de fecha en pagos/cuotas, o endpoint de agregación (
 
 - InboundOutbound (pagos/desembolsos por mes) cuando el Motor exponga agregación temporal o filtros de fecha.
 - Insight "pagos vencidos en el mes" si el Motor expone filtro por vencimiento en cuotas/pagos.
-- Endpoint opcional en Motor tipo GET /v1/dashboard/stats para reducir N llamadas desde el BFF/dashboard-server.
+- ~~Endpoint GET /v1/dashboard/stats~~ — hecho; reduce N llamadas a una.
