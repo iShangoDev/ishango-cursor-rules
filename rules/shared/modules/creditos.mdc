@@ -1,4 +1,4 @@
----
+﻿---
 description: Agente Módulo Créditos — aplica cuando Cursor edita archivos del módulo creditos en ERP o Motor
 globs: [
   "src/components/creditos/**/*.tsx",
@@ -264,5 +264,5 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 
 ## Pendiente por repo
 
-- **Pendiente en Motor:** Exponer campo `iva` en modelo Cuota y schema CuotaRead (columna ya existe en DB por migración 034).
-- **Pendiente en ERP:** —
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** Mostrar columna IVA en la vista de cuotas.
