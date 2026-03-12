@@ -1,0 +1,112 @@
+---
+description: Agente Módulo Estudio — Altas (carga Excel), Casos activos, Problemas, Inicios; ERP + Motor
+globs: [
+  "src/components/estudio/**/*.tsx",
+  "src/components/estudio/**/*.ts",
+  "src/app/(private)/app/estudio/**/*.tsx",
+  "src/app/api/estudio/**/*.ts",
+  "app/modules/estudio/**/*.py"
+]
+---
+
+# Módulo Estudio — iShango Sistema
+
+Carga del reporte general desde Excel (Altas). Casos activos = datos procesados con todos los estados (1..9) por caso. Problemas = faltantes con filtro por tipo de campo. La fuente operativa es Motor.
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Crea** — importación de reporte general (Excel) desde **Altas**; procesar PDFs (Inicios) enviando multipart al Motor
+- **Lee** — vista previa sin persistir; listado de casos activos (registros con estados 1..9); listado de problemas (faltantes) por tipo de columna; listado de problemas inicios (PDFs que no cumplieron)
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Import + registros expandidos + estados + faltantes
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `estudio_reporte_imports` | Cabecera de una carga (archivo) | usuario_id opcional |
+| `estudio_reporte_registros` | Una fila por CD (expandido si CD tiene `/`) | FK `import_id` |
+| `estudio_reporte_estados` | Estados 1..9 por registro | FK `registro_id` |
+| `estudio_reporte_faltantes` | Filas con dato faltante por columna | FK `import_id`, `registro_id` opcional |
+| `estudio_inicios_proceso` | Cabecera de una ejecución POST inicios/procesar (job por UUID) | usuario_id opcional |
+| `estudio_inicios_problemas` | PDFs que no cumplieron (al menos un CD no en altas) | FK `proceso_id` opcional |
+
+### Campos obligatorios en registro
+
+- **MONTO**, **CTA.SERV.**, **GRUPO** se guardan siempre.
+- CD (nro_certificado_deuda), fecha_informacion, secretaria, expediente, juzgado, jurisdiccion.
+
+---
+
+## ERP — UI (Dimensión 4)
+
+**Rutas y nombres:**
+
+- **Altas** — `/app/estudio/altas` — Wizard carga Excel (Stepper: Subir → Vista previa → Confirmar → Resultado)
+- **Casos activos** — `/app/estudio/casos-activos` — Tabla de registros (casos dados de alta) con columnas Estado 1..9, CD, Fecha info, Expediente, etc.; filtro opcional por carga
+- **Problemas** — `/app/estudio/problemas` — Tabla de faltantes con selector por **tipo de campo faltante** (Nro. Certificado Deuda, EstadoProcesal, Secretaria, Expediente, Juzgado, Jurisdicción)
+- **Inicios** — `/app/estudio/inicios` — Wizard subida PDFs (Prints), Generar; debajo tabla de descargas (ZIP + xlsx)
+- **Problemas Inicios** — `/app/estudio/problemas-inicios` — Tabla de PDFs que no cumplieron (al menos un CD no en altas)
+- Detalle por carga — `/app/estudio/resultado/[importId]` — Registros de una carga con Estado 1..9
+
+**Permisos:** `puedeHacer("estudio", "read")` para ver/descargar; `puedeHacer("estudio", "create")` para importar y para procesar inicios.
+
+**Navegación:** Dashboard → Estudio (submenú) → Altas | Casos activos | Problemas | Inicios | Problemas Inicios.
+
+---
+
+## Motor — API (Dimensión 3)
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| POST | `/v1/estudio/reporte-general/preview` | Vista previa (JSON, no persiste) | JWT |
+| POST | `/v1/estudio/reporte-general/importar` | Importar y persistir | JWT + permiso estudio create |
+| GET | `/v1/estudio/reporte-general/imports` | Listado paginado de cargas | estudio read |
+| GET | `/v1/estudio/reporte-general/registros` | Listado paginado de registros (casos activos); query `import_id` opcional | estudio read |
+| GET | `/v1/estudio/reporte-general/imports/{id}/registros` | Registros de una carga (con estados 1..9) | estudio read |
+| GET | `/v1/estudio/reporte-general/faltantes` | Listado paginado de faltantes; query `import_id`, `columna_faltante` opcionales | estudio read |
+| POST | `/v1/estudio/inicios/procesar` | Multipart `files` (PDFs); respuesta `{ problemas, descargas }` con zip_id/xlsx_id | estudio create |
+| GET | `/v1/estudio/inicios/problemas` | Listado paginado de problemas inicios; query `page`, `size`, `proceso_id` opcional | estudio read |
+| GET | `/v1/estudio/inicios/procesar/{job_id}/zip` | Descarga ZIP de PDFs correctos del proceso | estudio read |
+| GET | `/v1/estudio/inicios/procesar/{job_id}/xlsx` | Descarga xlsx del proceso | estudio read |
+
+Registros devuelven `estados: list[EstudioReporteEstadoRead]` (numero_estado, valor_estado) ordenados 1..9.
+
+---
+
+## Flujo de datos
+
+- Excel: todas las hojas; columnas por alias (EXPTE, F.INICIO, ESTADO_1..9, CTA.SERV, MONTO, GRUPO, CD, etc.).
+- CD con `/` se expande en varias filas (una por valor).
+- Respuesta preview: `filas`, `total_filas`, `faltantes_por_columna`.
+- Respuesta importar: `registros_insertados`, `estados_insertados`, `faltantes_por_columna`, `errores`.
+- Casos activos: equivalente a "Datos procesados" del Excel pero mostrando **todos los estados** (1..9) por caso, no solo el estado mayor.
+
+---
+
+## Submódulo Inicios (Prints / PDFs)
+
+Procesa PDFs (Prints): del **nombre** de cada archivo se extraen los números de certificado (CD); se cruzan con altas (`estudio_reporte_registros`); los que tienen todos los CDs en altas van al ZIP y al xlsx; los que no cumplen son "problemas inicios".
+
+### Flujo
+
+- Cliente sube PDFs en multipart **directamente al Motor** (para evitar límite 4,5 MB del BFF en Vercel). Autenticación con el mismo token de sesión.
+- Motor: almacena PDFs por `job_id` en `{storage}/{job_id}/pdfs/`; extrae CDs del nombre (regla abajo); consulta `cds_en_altas` en una sola query; clasifica correctos vs problemas; persiste problemas en `estudio_inicios_problemas`; genera ZIP (solo correctos) y xlsx; responde `{ problemas: IniciosProblemaRead[], descargas: IniciosDescargasRead }` con `zip_id` y `xlsx_id` = job_id.
+- ERP: wizard (Subir PDFs → Vista previa → Generar → Resultado) y tabla de descargas (ZIP, xlsx). Vista separada Problemas Inicios con tabla paginada desde GET problemas.
+
+### Regla de extracción de CDs (nombre del archivo)
+
+Tras el prefijo **"CD "** (case-insensitive), tomar la secuencia de números separados por **" - "** hasta **"CTA"** o fin de bloque. En código: regex `CD\s+([\d\s-]+?)(?=\s+CTA|$)`, luego split por `\s*-\s*` y filtrar tokens numéricos. Ejemplo: `CD 28676 - 42217 - 88382 CTA DE SERV ...` → `["28676", "42217", "88382"]`. Los CDs se obtienen solo del nombre; no se lee el contenido del PDF.
+
+### BFF (ERP)
+
+- `GET /api/estudio/inicios/upload-config` — devuelve `{ uploadUrl, token }` (Motor URL + token) para que el cliente suba multipart al Motor.
+- `GET /api/estudio/inicios/descarga?tipo=zip|xlsx&id=...` — proxy al Motor para descargar el archivo (autenticado).
+
+### Formato xlsx de salida (Motor)
+
+Estructura actual **mínima**: hoja "Inicios", columnas "Nombre archivo" y "CDs". Debe alinearse al archivo modelo **SSCC66 Reporte inicios** (hojas/columnas) cuando se disponga del archivo de referencia; hasta entonces se usa esta estructura mínima.

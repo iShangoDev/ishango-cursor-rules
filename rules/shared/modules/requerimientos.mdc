@@ -1,0 +1,141 @@
+---
+description: Agente Módulo Requerimientos — aplica cuando Cursor edita archivos del módulo requerimientos en ERP o Motor
+globs: [
+  "src/components/requerimientos/**/*.tsx",
+  "src/components/requerimientos/**/*.ts",
+  "src/app/(private)/app/requerimientos/**/*.tsx",
+  "src/app/api/requerimientos/**/*.ts",
+  "app/modules/requerimientos/**/*.py"
+]
+---
+
+# Módulo Requerimientos — iShango Sistema
+
+Toma de requerimientos (SRS): formulario para capturar nuevas funcionalidades, mejoras o módulos. Cada requerimiento tiene ítems (criterios de aceptación) con estado documentado; barra de progreso por cantidad de ítems documentados. Alcance actual: solo fase de requerimientos (pendiente | documentado).
+
+## Comportamiento declarado (Dimensión 2)
+
+- **Crea** — alta de requerimiento con título, descripción, fuente, tipo, prioridad e ítems
+- **Modifica** — actualización de campos y estado; marcar ítems como documentados
+- **Elimina** — soft delete
+- **Lee** — listado paginado con filtro por estado, detalle con ítems y progreso
+
+---
+
+## Motor — Datos (Dimensión 1)
+
+**Patrón:** Principal + detalle
+
+### Tablas
+
+| Tabla | Descripción | Relaciones |
+|-------|-------------|------------|
+| `requerimientos` | Título, descripción, fuente, tipo, prioridad, estado | 1:N con `requerimiento_items` |
+| `requerimiento_items` | Orden, descripción, documentado | N:1 con `requerimientos` |
+
+### Modelo SQLModel
+
+- Requerimiento: id, titulo, descripcion, fuente, tipo (enum), prioridad (enum opcional), estado (pendiente | documentado), created_at, updated_at, deleted_at
+- RequerimientoItem: id, requerimiento_id (FK), orden, descripcion, documentado (bool), created_at, updated_at
+- Enums: TipoRequerimiento, PrioridadRequerimiento, EstadoRequerimiento
+
+### Migración
+
+- migrations/versions/20260312_048_add_requerimientos_tables.py
+- migrations/versions/20260312_049_add_requerimientos_to_rbac_seed.py
+
+---
+
+## Motor — API (Dimensión 3)
+
+**Patrón:** CRUD + sub-recurso ítems
+
+| Método | Ruta | Descripción | Auth |
+|--------|------|-------------|------|
+| GET | /v1/requerimientos/ | Listado paginado; filtro estado; progreso por fila | Sí |
+| POST | /v1/requerimientos/ | Crear (body puede incluir items[]) | Sí |
+| GET | /v1/requerimientos/{id} | Detalle con items y progreso | Sí |
+| PATCH | /v1/requerimientos/{id} | Actualizar campos y/o estado | Sí |
+| DELETE | /v1/requerimientos/{id} | Soft delete | Sí |
+| GET | /v1/requerimientos/{id}/items/ | Listar ítems | Sí |
+| POST | /v1/requerimientos/{id}/items/ | Agregar ítem | Sí |
+| PATCH | /v1/requerimientos/{id}/items/{item_id} | Actualizar ítem (p. ej. documentado) | Sí |
+| DELETE | /v1/requerimientos/{id}/items/{item_id} | Eliminar ítem | Sí |
+
+ListParams: page, size, sort, estado (pendiente | documentado).
+
+---
+
+## Motor — Reglas de negocio
+
+1. Soft delete en requerimientos; listado excluye deleted_at != null por defecto.
+2. Progreso = (ítems documentados / total ítems) * 100; no se persiste, se calcula al leer.
+3. Si todos los ítems están documentado=true, el service puede transicionar estado a documentado.
+4. Título obligatorio en create/update.
+
+---
+
+## ERP — BFF (Dimensión 4)
+
+**Patrón:** Proxy puro
+
+- GET /api/requerimientos?page=&size=&estado= → GET /v1/requerimientos/
+- POST /api/requerimientos → body a POST /v1/requerimientos/
+- GET /api/requerimientos/[id] → GET /v1/requerimientos/{id}
+- PATCH /api/requerimientos/[id] → PATCH /v1/requerimientos/{id}
+- DELETE /api/requerimientos/[id] → DELETE /v1/requerimientos/{id}
+- PATCH /api/requerimientos/[id]/items/[itemId] → PATCH ítem (documentado)
+
+---
+
+## ERP — Root URL (Dimensión 5)
+
+- /app/requerimientos — listado
+- /app/requerimientos/create — crear
+- /app/requerimientos/[id] — detalle con ítems y barra de progreso
+
+---
+
+## ERP — Frontend (Dimensión 6)
+
+**Modelo Devias:** CRUD Lista Simple (referencia customers)
+**Referencia:** components/dashboard/customer/ (tabla con barra de progreso y Chip estado)
+**Patrón listado:** Lista paginada
+
+### Estructura de archivos
+
+- src/app/(private)/app/requerimientos/page.tsx, loading.tsx, create/page.tsx, [id]/page.tsx
+- src/app/api/requerimientos/route.ts, [id]/route.ts, [id]/items/[itemId]/route.ts
+- src/components/requerimientos/: requerimientos-view, requerimientos-table, requerimientos-filters, requerimientos.types, use-requerimientos, requerimiento-form, requerimiento-editar-modal, requerimiento-create-form, requerimiento-detail-view
+
+---
+
+## Permisos RBAC (Dimensión 7)
+
+**Patrón:** CRUD básico
+
+puedeHacer('requerimientos', 'create' | 'edit' | 'delete'). Solo en requerimientos-view.tsx y detail-view; pasar canCreate, canEdit, canDelete a hijos.
+
+---
+
+## Modelo extendido
+
+- **Modelo Devias:** CRUD Lista Simple
+- **Referencia:** components/dashboard/customer/
+- **Patrón listado:** Lista paginada
+- **Patrón:** Lista con columna progreso (LinearProgress + %) y estado (Chip); detalle con ítems y checkboxes documentado; transición a documentado cuando 100%.
+
+---
+
+## Decisiones técnicas
+
+- GET detail devuelve items embebidos y progreso calculado en Motor.
+- Ítems se agregan en create (body items[]) o vía POST .../items/; en detalle solo se marcan como documentados (PATCH item).
+- Barra de progreso en lista y en detalle; mismo cálculo (documentados/total*100).
+
+---
+
+## Pendiente por repo
+
+- **Pendiente en Motor:** —
+- **Pendiente en ERP:** —

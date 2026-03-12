@@ -34,6 +34,12 @@ Administración del catálogo de productos financieros y sus líneas de crédito
 
 Endpoint para otros módulos (solicitud-credito, créditos). El BFF hace proxy a `GET /v1/productos-credito/lineas/{lineaId}/parametros`. La respuesta se tipa en ERP como `LineaCreditoParametros` en `productos-credito.types.ts` (tipo_amortizacion, cuotas_min/max, tasa_interes, capital_min/max, gastos, gastos_tipo, tasa_iva opcional). El Motor debe devolver un JSON que cumpla ese contrato.
 
+**Convención actual (solicitud-credito):**
+- Para convertir solicitud a crédito se usa solo amortización `frances`.
+- `tasa_interes` de la línea se interpreta anual y se convierte en Motor a mensual con `anual / 12`.
+- IVA se aplica por cuota sobre `interes + gastos_cuota`.
+- Los datos de entrada de solicitud para cálculo son solo `monto` y `cantidad_cuotas`.
+
 ## IVA
 
 La línea puede tener `tasa_iva` (porcentaje, ej. 21). Se aplica a gastos e intereses. Cómo se refleje en cuotas y créditos (importe_iva, etc.) lo implementan otros módulos; este módulo solo define y muestra el campo en la línea y lo expone en GET parametros.
@@ -49,5 +55,5 @@ La línea puede incluir `tna` (Tasa Nominal Anual, %) y `cft` (Costo Financiero 
 
 ## Consumidores
 
-- Credito y SolicitudCredito siguen con `producto_credito_id`. Cuando el flujo de originación use líneas, se puede agregar `linea_credito_id` y consumir GET lineas/{id}/parametros.
+- SolicitudCredito consume línea explícita al convertir (modal + `linea_credito_id`) y genera cuotas en Motor con parámetros de la línea.
 - El wizard de creación de crédito (credito-crear-wizard) aún referencia tasas; actualizar a lineas cuando se implemente el flujo por línea.

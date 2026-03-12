@@ -135,6 +135,7 @@ app/modules/creditos/
 - GET/PATCH/DELETE `/api/creditos/[id]`
 - GET `/api/creditos/[id]/cuotas`
 - **GET `/api/creditos/[id]/detalle`** — proxy a `GET /v1/creditos/{id}/detalle`; reenvía el JSON `{ credito, cuotas, pagos, persona }` sin agregación en el BFF.
+- **GET `/api/pagos/[id]`** — proxy a `GET /v1/pagos/{id}`; devuelve pago + eventos (detalle de imputación por cuota). Usado en modal "Ver detalle" en tab Pagos del detalle de crédito.
 - POST `/api/pagos/imputar` (wizard imputar)
 
 Todos usan `motorFetch` y `getMotorUrl()`.
@@ -247,7 +248,7 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 - Detalle: una sola llamada al Motor (`GET /v1/creditos/{id}/detalle`); BFF proxy puro. Vista recibe credito, cuotas, pagos, persona.
 - Errores: BFF devuelve siempre JSON (try/catch en res.json()); cliente no re-lanza para no disparar error boundary.
 - Prefetch: `creditosQueryKey.list({ page: 1, size: 25 })` en `use-prefetch-module.ts` (patrón paginado como personas)
-- Wizard imputar: upload CSV → preview → confirm → resultado (no modal simple)
+- Wizard imputar: upload CSV → preview → confirm → resultado (no modal simple). Formato CSV y reglas según Motor: ver `docs/creditos/pagos-wizard-erp.md` (referencia a `ishango-motor/docs/creditos/pagos-identificacion-imputacion.md`). IdUnicoCanal: si no viene en CSV, el ERP genera `erp_imputar_<uuid>` por fila; canal por defecto `csv_imputar`.
 - Creación de crédito: modal + form (`credito-crear-modal.tsx` + `CreditoForm`); no existe wizard de simulación (Motor no expone POST /simular).
 - Ver `docs/IMPLEMENTACION-HU1-ENVIAR-A-ERP.md` para flujo Credinter → solicitud crédito
 
@@ -264,5 +265,5 @@ Solo llamar `puedeHacer()` en `creditos-view.tsx`. Pasar `canCreate`, `canEdit`,
 ## Pendiente por repo
 
 - **Pendiente en Motor:** — (campo `iva` en Cuota/CuotaRead ya implementado; definiciones de pagos 22–26 realizadas.)
-- **Pendiente en ERP:** Cambios derivados de las definiciones de pagos: consumir `GET /v1/pagos/{id}` cuando se necesite detalle con eventos; wizard imputar y CSV según `docs/creditos/pagos-identificacion-imputacion.md`.
+- **Pendiente en ERP:** — (GET `/api/pagos/[id]` implementado con modal "Ver detalle" en tab Pagos; wizard imputar y CSV alineado con doc Motor y `docs/creditos/pagos-wizard-erp.md`; credito-crear-wizard cerrado — creación por modal + form.)
 - **Pendiente para Credinter:** Consumir bulk (`POST /v1/credinter/pagos`) y CSV según doc; no usar pago único (`POST /v1/credinter/pago`) — usar solo bulk o CSV.

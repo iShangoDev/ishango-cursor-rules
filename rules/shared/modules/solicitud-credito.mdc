@@ -34,9 +34,8 @@ Ver `docs/investigacion/20260302-solicitud-credito-modulo.md`, `docs/IMPLEMENTAC
 | `credinter_request_data` | JSON con persona + crédito desde Credinter |
 | `persona_id` | FK nullable a personas |
 | `nro_credito` | Número de crédito |
-| `monto`, `cantidad_cuotas`, `importe_cuota`, `tasa_mensual` | Datos del préstamo |
+| `monto`, `cantidad_cuotas`, `importe_cuota`, `tasa_mensual` | Datos del préstamo (para conversión usar solo monto + cantidad_cuotas) |
 | `producto_credito_id` | nullable |
-| `linea_credito_id` | nullable, FK a lineas_credito |
 | `estado` | pending, convertido, rechazado |
 | `created_at`, `updated_at` | Auditoría |
 
@@ -52,7 +51,7 @@ No hay cuotas en esta tabla; se generan al convertir (tabla creditos/cuotas).
 |--------|------|-------------|------|
 | GET | `/v1/solicitud-credito/` | Listado paginado (page, size, sort, nro_credito, monto, estado) | JWT |
 | GET | `/v1/solicitud-credito/{id}` | Detalle | JWT |
-| POST | `/v1/solicitud-credito/{id}/convertir` | Crea crédito + cuotas, marca solicitud convertida | JWT |
+| POST | `/v1/solicitud-credito/{id}/convertir` | Crea crédito + cuotas, marca solicitud convertida. **Body obligatorio:** `linea_credito_id` | JWT |
 
 Sync Credinter: `POST /v1/credinter/solicitud` inserta en `solicitudes_credito` (no en creditos). Ver `modules/credinter_sync.mdc`.
 
@@ -66,12 +65,16 @@ Sync Credinter: `POST /v1/credinter/solicitud` inserta en `solicitudes_credito` 
 
 ### Consumo de líneas de productos-credito
 
-- La solicitud puede tener `linea_credito_id` (FK a `lineas_credito`).
-- Al ejecutar **Convertir**, si `linea_credito_id` está presente:
-  - El Motor llama `GET /v1/productos-credito/lineas/{lineaId}/parametros`.
-  - Obtiene: `tipo_amortizacion`, `tasa_iva`, `tna`, `cft`, `gastos`, `cuotas_min/max`, `capital_min/max`.
-  - Genera cuotas con la amortización indicada y aplica IVA sobre intereses.
-- Si no hay `linea_credito_id`, se usa el flujo actual (frances, tasa de la solicitud).
+- Al ejecutar **Convertir**, la UI envía `linea_credito_id` en el body del POST convertir.
+- El Motor llama `GET /v1/productos-credito/lineas/{lineaId}/parametros`.
+- Obtiene: `tipo_amortizacion`, `tasa_interes` (anual), `tasa_iva`, `gastos`, `gastos_tipo`, `cuotas_min/max`, `capital_min/max`.
+- Para convertir solicitud a crédito:
+  - Usa solo `solicitud.monto` (capital) y `solicitud.cantidad_cuotas` (períodos).
+  - Ignora `solicitud.tasa_mensual` y `solicitud.importe_cuota` en el cálculo.
+  - Convierte tasa anual a mensual con `tasa_mensual = tasa_anual / 12`.
+  - Solo admite amortización **francesa**.
+  - Aplica IVA por cuota sobre `(interes + gastos_cuota)`.
+  - Fecha de vencimiento fija: día **10** de cada mes.
 
 ---
 
@@ -118,7 +121,7 @@ src/
 │       ├── route.ts                    ← GET list
 │       └── [id]/
 │           ├── route.ts                ← GET detail
-│           └── convertir/route.ts      ← POST convertir
+│           └── convertir/route.ts      ← POST convertir (propaga linea_credito_id)
 ├── lib/data/
 │   └── solicitud-credito-server.ts     ← fetchSolicitudCreditoList, fetchSolicitudCreditoById
 └── components/solicitud-credito/
@@ -126,6 +129,7 @@ src/
     ├── solicitud-credito-table.tsx     ← Tabla (Solicitante desde credinter_request_data)
     ├── solicitud-credito-filters.tsx   ← Filtros nro_credito, monto (URL params)
     ├── solicitud-credito-detail-view.tsx ← Detalle persona + crédito (parseCredinterRequestData)
+    ├── solicitud-credito-convertir-modal.tsx ← Modal obligatorio para seleccionar línea
     └── solicitud-credito.types.ts       ← SolicitudCredito + CredinterRequestData + parseCredinterRequestData
 ```
 
@@ -171,7 +175,6 @@ No hay `canCreate`, `canEdit`, `canDelete` — el módulo es solo lectura + acci
 
 ## Mejoras posibles
 
-- Modal "Convertir a crédito" en ERP — llamar a `/api/solicitud-credito/[id]/convertir` (Motor ya expone POST convertir); el botón en ERP queda para una iteración posterior.
 - Estado badge específico para solicitudes (EvaluationStatusBadge de Credinter) si se requiere.
 - Filtro `estado` en listado.
 
