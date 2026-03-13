@@ -28,6 +28,10 @@ El agente ejecuta solo los comandos definidos aquí.
 
 ## REPO 2 — iShangoMotor
 
+**Rama única:** El Motor solo tiene la rama **main**. No existe rama develop en el repo; trabajar y hacer push siempre a `origin main`.
+
+**Sin base de datos local:** No hay PostgreSQL del Motor en local (el host "postgres" es para Docker en DO). El agente **no** ejecuta `alembic upgrade head` en local. Las migraciones se aplican solo en el deploy (GitHub Actions al push a main).
+
 ### Push (código)
 
 5. El agente ejecuta: `git add .` → `git commit -m "..."` → `git push origin main`
@@ -40,6 +44,15 @@ El agente ejecuta solo los comandos definidos aquí.
 ### Validación post-deploy (cierra el flujo)
 
 8. El agente comprueba que el Motor responde: `Invoke-WebRequest -Uri "http://159.89.89.130:8001/health" -UseBasicParsing` (PowerShell). Si devuelve 200, el flujo se da por cerrado.
+
+### Validación ampliada Motor (más que “levantó”)
+
+9. **Ruta GET política sin 500** — El paso 8 solo prueba que el proceso HTTP responde. Para cerrar InfoExperto política: llamar **GET** `/v1/infoexperto/politica` **sin** Bearer. Esperado **401** o **403** (auth). **500** = error app o tabla antes de bootstrap; con código reciente el bootstrap crea tabla en el primer GET autenticado.
+   - PowerShell:  
+     `Invoke-WebRequest -Uri "http://159.89.89.130:8001/v1/infoexperto/politica" -UseBasicParsing`  
+     (sin credenciales: status **401** o **403** = OK.)
+
+10. **SSH en Digital Ocean** — El agente **no** tiene `DEPLOY_HOST` / `DEPLOY_SSH_KEY` (solo GitHub Actions). Para validar **alembic + fila en DB**, entrar por SSH al droplet y seguir **`do-infoexperto-validacion.mdc`** (Motor): `alembic current`, `psql` → `infoexperto_politica`, login + GET política con JWT → **200**.
 
 ---
 

@@ -5,58 +5,61 @@ alwaysApply: false
 
 # Validación InfoExperto en DO
 
-Criterio de **terminado**: Motor en DO con migración 022 aplicada, RBAC infoexperto activo, login con usuario con permiso, endpoint evaluate accesible con JWT y (opcional) 200 cuando INFOEXPERTO_API_KEY está configurada.
+**Health (paso 8 workflow)** solo confirma que el Motor **levantó**. Esta guía cierra **migración + política + RBAC**.
 
-**Credenciales en DO:** En el servidor la contraseña del admin puede no ser `admin123`. Usar siempre las credenciales realmente configuradas en el servidor (ej. en `.env.production` o gestionadas por el equipo). No asumir admin123 en DO.
+**SSH:** Misma máquina que usa GitHub Actions (`DEPLOY_HOST`, usuario y clave en secrets). En el servidor: `cd /opt/iShangoMotor`.
+
+**Credenciales app:** Contraseña del admin en DO (`.env` / equipo). No asumir `admin123`.
 
 ---
 
-## Checklist (ejecutar en el servidor)
+## Checklist (ejecutar en el servidor vía SSH)
 
-### 1. Motor y migración
-
-```bash
-curl -s http://localhost:8001/health
-docker compose -f docker-compose.prod.yml exec motor alembic current
-```
-
-Debe devolver **022** (head).
-
-### 2. Usuario admin y RBAC
+### 1. Health + Alembic
 
 ```bash
-docker compose -f docker-compose.prod.yml exec postgres psql -U ishango -d ishango_db -c "SELECT id, email FROM usuarios WHERE email = 'admin@ishango.com';"
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/health
+# esperado: 200
+
+docker compose -f docker-compose.prod.yml exec -T motor alembic current
+# esperado: revision >= 051 (ideal 052). Si falla el deploy, el job debe fallar (alembic sin || true).
 ```
 
-Debe haber 1 fila. Opcional: comprobar rol infoexperto en `usuario_rol` / `roles`.
-
-### 3. Login
-
-En el servidor, usar la contraseña configurada en DO (no asumir admin123):
+### 2. Tabla política (obligatoria para GET/PATCH sin 500)
 
 ```bash
-curl -X POST http://localhost:8001/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@ishango.com","password":"CONTRASEÑA_CONFIGURADA_EN_SERVIDOR"}'
+docker compose -f docker-compose.prod.yml exec -T postgres psql -U ishango -d ishango_db -c \
+  "SELECT id, updated_at FROM infoexperto_politica LIMIT 1;"
 ```
 
-Esperado: 200 y `access_token` en la respuesta.
+Esperado: **1 fila**, `id = a0000001-0001-4000-8000-000000000001`. Si vacía, el primer GET autenticado con código bootstrap puede crearla; si sigue fallando, ejecutar manualmente `docker compose exec motor alembic upgrade head`.
 
-### 4. Evaluate con JWT
+### 3. Login + GET política (200)
 
-No usar `curl -H "Authorization: Bearer $TOKEN"` desde SSH/Windows (el header no llega bien). Usar script Python en el servidor (ver workflow.mdc — "Probar evaluate en DO") o guardar token en archivo y script .sh.
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8001/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@ishango.com","password":"TU_CONTRASEÑA"}' | jq -r '.access_token')
 
-Esperado al llamar `POST /v1/infoexperto/evaluate` con Bearer válido:
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/v1/infoexperto/politica \
+  -H "Authorization: Bearer $TOKEN"
+# esperado: 200 (usuario con read infoexperto, edit, o read configuración)
+```
 
-- **200** si INFOEXPERTO_API_KEY está configurada y el proveedor responde.
-- **503** "Servicio de informes no configurado" si falta INFOEXPERTO_API_KEY.
-- Si sale **403** "Not authenticated" suele ser que el header Authorization no llegó (mitigación en workflow.mdc).
+### 4. Sin JWT (desde fuera o curl sin header)
 
-### 5. INFOEXPERTO_API_KEY (opcional)
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/v1/infoexperto/politica
+# esperado: 401 o 403 — nunca 500 si la app está sana
+```
 
-En `.env` del servidor: `INFOEXPERTO_API_KEY` con valor no vacío; reiniciar motor; repetir paso 4. Debe intentar llamada al proveedor (200 o 502 según proveedor).
+### 5. Evaluate con JWT (opcional)
+
+Ver sección histórica: `POST /v1/infoexperto/evaluate` con Bearer; 200 / 503 según `INFOEXPERTO_API_KEY`.
 
 ---
 
 ## Referencia
 
-- Workflow y mitigaciones curl/Bearer: `workflow.mdc`
-- Fuente de verdad: `fuente-de-verdad.mdc`
+- **workflow.mdc** — pasos 8–10 (health + GET política + SSH)
+- **fuente-de-verdad.mdc**
